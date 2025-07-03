@@ -1,40 +1,69 @@
+import requests
 from fastapi import FastAPI, Request
-from pydantic import BaseModel
-import uvicorn
-from typing import List
-
 
 app = FastAPI()
 
-class Customer(BaseModel):
-    first_name: str = None
-    last_name: str = None
-    phone: str = None
+# توكنات البوتات
+ALEX_BOT_TOKEN = "7569464405:AAHosRAyvKcherRu_iMcgapopnqsmmOLmEU"
+ALEX_CHAT_ID = "1110037703"
 
-class LineItem(BaseModel):
-    title: str
-    quantity: int
+OTHER_BOT_TOKEN = "2147453430:AAFc3aKabHmjfJP_ubW2jjfHkxoq1zj3GnM"
+OTHER_CHAT_ID = "1110037703"
 
-class OrderWebhook(BaseModel):
-    id: int
-    customer: Customer = None
-    total_price: str
-    line_items: List[LineItem] = []
+def send_telegram(token, chat_id, message):
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {"chat_id": chat_id, "text": message}
+    requests.post(url, data=payload)
+
+def format_order_message(order):
+    order_number = order.get("order_number")
+    total_price = order.get("total_price") + " EGP"
+    phone = order.get("shipping_address", {}).get("phone", "").replace("+", "").replace(" ", "")
+    
+    line_items = order.get("line_items", [])
+    products = ""
+    for item in line_items:
+        products += f"- {item['title']} (x{item['quantity']})\n"
+
+    msg = f"""wa.me/{phone}
+
+안녕하세요!  to Korean Beautys   🌸  
+
+بنتواصل مع حضرتك لتأكيد طلبك رقم {order_number}
+
+بمبلغ {total_price}
+
+{products}📦 الطلب هيتم شحنه غدا وهيوصل خلال ٢-٥ ايام  من يوم التأكيد  
+
+📌 ملحوظة مهمة:  
+•⁠  ⁠بعد شحن الطلب، لا يمكن إلغاؤه.  
+•⁠في حالة الإلغاء بعد الشحن، يتم تحصيل مصاريف الشحن85 جنيه لكل المحافظات من حضرتك .  
+
+•⁠  ⁠الطلب له محاولتان للتوصيل، والتوصيل يكون من الساعة 10 صباحًا حتى 7 مساءًا
+
+•⁠  ⁠في حال تغيير العنوان بعد الشحن، يستغرق التعديل 48 ساعة عمل.  
+
+•⁠  ⁠في حال كان العنوان غير واضح، يُرجى تحديده بدقة بذكر (المحافظة – المنطقة – أقرب معلم واضح) لتجنب أي تأخير في التوصيل.   
+
+لو معندناش رد خلال 24 ساعة، الاوردر بيتلغي تلقائيًا."""
+    
+    return msg
 
 
 @app.post("/webhook")
-async def receive_webhook(order: OrderWebhook):
-    print("✅ Order received:")
-    print("Order ID:", order.id)
-    if order.customer:
-        print("Customer:", order.customer.first_name, order.customer.last_name)
-        print("Phone:", order.customer.phone)
-    print("Total:", order.total_price)
-    print("Items:")
-    for item in order.line_items:
-        print(f"- {item.title} (x{item.quantity})")
+async def handle_order(request: Request):
+    data = await request.json()
 
-    return {"status": "received"}
+    province = (
+        data.get("shipping_address", {}).get("province", "") or
+        data.get("billing_address", {}).get("province", "")
+    ).lower()
 
-if __name__ == "__main__":
-    uvicorn.run("app:app", host="127.0.0.1", port=5000, reload=True)
+    message = format_order_message(data)
+
+    if "alexandria" in province:
+        send_telegram(ALEX_BOT_TOKEN, ALEX_CHAT_ID, message)
+    else:
+        send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
+
+    return {"status": "sent"}
