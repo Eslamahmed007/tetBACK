@@ -4,11 +4,11 @@ from fastapi import FastAPI, Request
 app = FastAPI()
 
 # توكنات البوتات
-ALEX_BOT_TOKEN = "7569464405:AAHosRAyvKcherRu_iMcgapopnqsmmOLmEU"
-ALEX_CHAT_ID = "1110037703"
+ALEX_BOT_TOKEN = "8020725694:AAHVb-njS2E9cTWmZXdNxUjBq3m58tlFH_A"
+ALEX_CHAT_ID = "5660125152"
 
-OTHER_BOT_TOKEN = "2147453430:AAFc3aKabHmjfJP_ubW2jjfHkxoq1zj3GnM"
-OTHER_CHAT_ID = "1110037703"
+OTHER_BOT_TOKEN = "7399814752:AAGI-IAMNxImH6ATsY3T3iRf8Y1EAvn-7F0"
+OTHER_CHAT_ID = "5660125152"
 
 def send_telegram(token, chat_id, message):
     url = f"https://api.telegram.org/bot{token}/sendMessage"
