@@ -29,13 +29,19 @@ def format_order_message(order):
             break
 
     phone1 = order.get("shipping_address", {}).get("phone", "").replace("+", "").replace(" ", "")
+    address1 = order.get("shipping_address", {}).get("address1", "")
 
     line_items = order.get("line_items", [])
     products = ""
     for item in line_items:
-        products += f"- {item['title']} (x{item['quantity']})\n"
+        if item['title'] =="Cash on Delivery fee" or item['title'] =='Normal Package' or item['title'] =='Premium Package':
+            continue
+        else:
+            products += f"- {item['title']} (x{item['quantity']})\n"
 
-    msg = f"""Whatsapp number ={phone}
+    
+
+    msg = f"""Whatsapp number = {phone}
 phone number= {phone1}
 
 안녕하세요!  to Korean Beautys   🌸  
@@ -44,7 +50,11 @@ phone number= {phone1}
 
 بمبلغ {total_price}
 
+عنوان: {address1}
+
+
 {products}📦 الطلب هيتم شحنه غدا وهيوصل خلال ٢-٥ ايام  من يوم التأكيد  
+
 
 📌 ملحوظة مهمة:  
 •⁠  ⁠بعد شحن الطلب، لا يمكن إلغاؤه.  
