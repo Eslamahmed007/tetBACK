@@ -81,13 +81,14 @@ async def handle_order(request: Request):
     codes = data.get("discount_codes", [])
     code_values = [c.get("code", "") for c in codes]
     codes_text = ", ".join(filter(None, code_values)) or "NO"
-    if "PREPAID" in codes_text:
+    
+    if paid=="Paid" or paid=="paid":
+
+        return {"status": "paid - skipped"}
+    
+    elif "PREPAID" in codes_text:
         send_telegram(PRE_BOT_TOKEN, PRE_CHAT_ID, message)
         return {"status": "sent to prepaid bot"}
-    
-    elif paid=="Paid" or paid=="paid":
-
-        return {"status": "prepaid - skipped"}
     
 
     else:
