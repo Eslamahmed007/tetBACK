@@ -30,6 +30,7 @@ def format_order_message(order):
 
     phone1 = order.get("shipping_address", {}).get("phone", "").replace("+", "").replace(" ", "")
     address1 = order.get("shipping_address", {}).get("address1", "")
+    name = order.get("shipping_address", {}).get("name", "")
 
     line_items = order.get("line_items", [])
     products = ""
@@ -43,6 +44,8 @@ def format_order_message(order):
 
     msg = f"""Whatsapp number = {phone}
 phone number= {phone1}
+
+Hi {name}
 
 안녕하세요!  to Korean Beautys   🌸  
 
