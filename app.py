@@ -3,6 +3,9 @@ from fastapi import FastAPI, Request
 
 app = FastAPI()
 
+CON_BOT_TOKEN = "7682957953:AAE_UVOfIFKNQ3dMANjsH6JMwLTAbocI8ys"
+CON_CHAT_ID = "5660125152"
+
 PRE_BOT_TOKEN = "7228712143:AAGjZXlM_i2nNI6xsTvRgbokge1o9lQjf-8"
 PRE_CHAT_ID = "5660125152"
 
@@ -106,3 +109,9 @@ async def handle_order(request: Request):
             send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
 
         return {"status": "sent"}
+
+@app.get("/confirm")
+def notify_order(order_number: str):
+    message = f"🔔 order: {order_number} has been delivered successfully"
+    send_telegram(CON_BOT_TOKEN, CON_CHAT_ID, message)
+    return {"status": "message sent", "order": order_number}
