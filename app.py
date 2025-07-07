@@ -3,6 +3,8 @@ from fastapi import FastAPI, Request
 
 app = FastAPI()
 
+MAIL_TOKEN = "8113524955:AAEQovNmZr-38ogi3UQBgrC20rNtwIslJ_c"
+
 CON_BOT_TOKEN = "7682957953:AAE_UVOfIFKNQ3dMANjsH6JMwLTAbocI8ys"
 CON_CHAT_ID = "5660125152"
 
@@ -189,3 +191,26 @@ def notify_order(order_number: str):
     message = f"🔔 order: {order_number} has been delivered successfully"
     send_telegram(CON_BOT_TOKEN, CON_CHAT_ID, message)
     return {"status": "message sent", "order": order_number}
+
+
+@app.post("/zoho-mail-webhook")
+async def zoho_mail_webhook(req: Request):
+    data = await req.json()
+
+    sender = data.get("fromAddress", "Unknown Sender")
+    subject = data.get("subject", "No Subject")
+    summary = data.get("summary", "")
+    
+    message = f"""📧 New Email Received
+From: {sender}
+Subject: {subject}
+Snippet: {summary}"""
+
+    url = f"https://api.telegram.org/bot{MAIL_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": OTHER_CHAT_ID,
+        "text": message
+    }
+    requests.post(url, data=payload)
+    
+    return {"status": "Message sent to Telegram"}
