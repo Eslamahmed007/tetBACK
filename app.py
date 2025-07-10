@@ -262,6 +262,7 @@ async def save_and_send_tracking(request: Request):
     data = await request.json()
     last_tracking_number = data.get("tracking_number", "")
     last_order_name = data.get("name", "")
+    last_order_name = last_order_name.replace(".1", "")
 
     response_data = {
         "status": "stored",
