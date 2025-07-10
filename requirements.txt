@@ -3,7 +3,3 @@ uvicorn[standard]
 httpx
 pydantic
 requests
-os
-base64
-datetime
-Query
