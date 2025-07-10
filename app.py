@@ -1,5 +1,8 @@
-import requests
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request , Query
+import base64
+import datetime
+from fastapi.responses import FileResponse
+import os, requests
 
 app = FastAPI()
 
@@ -239,3 +242,75 @@ def handle_bosta_webhook(request: Request):
         return {"status": "notified"}
     else:
         return {"status": "ignored", "state": state}
+
+
+
+last_tracking_number = None
+last_order_name = None
+
+BOSTA_TOKEN = "3df1df2a6ca817c65b3144ef2ad57f1290a87105e8faf6c28db88cdafd11b417"
+BOSTA_URL = "https://app.bosta.co/api/v2/deliveries/mass-awb"
+
+SUPABASE_URL = "https://pajbauwtxjhdobsgdevx.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhamJhdXd0eGpoZG9ic2dkZXZ4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MjExNzY5NSwiZXhwIjoyMDY3NjkzNjk1fQ.ZsBZbtDq1ETmPAz0SCQ1979Li8y4-ouUQycrUlqTiNo"
+BUCKET_NAME = "pdfs"
+
+@app.post("/tracking")
+async def save_and_send_tracking(request: Request):
+    global last_tracking_number, last_order_name
+
+    data = await request.json()
+    last_tracking_number = data.get("tracking_number", "")
+    last_order_name = data.get("name", "")
+
+    response_data = {
+        "status": "stored",
+        "tracking_number": last_tracking_number,
+        "name": last_order_name
+    }
+
+    payload = {
+        "trackingNumbers": last_tracking_number,
+        "requestedAwbType": "A6",
+        "lang": "en"
+    }
+    headers = {
+        "Authorization": BOSTA_TOKEN
+    }
+
+    try:
+        res = requests.post(BOSTA_URL, json=payload, headers=headers)
+        res.raise_for_status()
+        res_json = res.json()
+        response_data["bosta_response"] = res_json
+
+        base64_pdf = res_json.get("data")
+        if base64_pdf:
+            pdf_bytes = base64.b64decode(base64_pdf)
+            today = datetime.date.today().isoformat()
+            filename = f"{last_order_name}.pdf"
+            storage_path = f"{today}/{filename}"
+
+            upload_url = f"{SUPABASE_URL}/storage/v1/object/{BUCKET_NAME}/{storage_path}"
+            upload_headers = {
+                "Authorization": f"Bearer {SUPABASE_KEY}",
+                "Content-Type": "application/pdf"
+            }
+
+            upload_response = requests.put(upload_url, headers=upload_headers, data=pdf_bytes)
+
+            if upload_response.status_code in [200, 201]:
+                response_data["upload_status"] = "success"
+                response_data["file_url"] = f"{SUPABASE_URL}/storage/v1/object/public/{BUCKET_NAME}/{storage_path}"
+            else:
+                response_data["upload_status"] = "failed"
+                response_data["upload_error"] = upload_response.text
+        else:
+            response_data["error"] = "No base64 PDF found in Bosta response."
+
+    except Exception as e:
+        response_data["error"] = str(e)
+        if "res" in locals():
+            response_data["bosta_raw"] = res.text
+
+    return response_data
