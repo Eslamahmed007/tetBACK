@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request
 app = FastAPI()
 
 MAIL_TOKEN = "8113524955:AAEQovNmZr-38ogi3UQBgrC20rNtwIslJ_c"
+EME = "7890080421:AAFs4eXADn47TTFzhkjKSVsKgP8-2TYBNcw"
 
 CON_BOT_TOKEN = "7682957953:AAE_UVOfIFKNQ3dMANjsH6JMwLTAbocI8ys"
 CON_CHAT_ID = "5660125152"
@@ -214,3 +215,27 @@ Snippet: {summary}"""
     requests.post(url, data=payload)
     
     return {"status": "Message sent to Telegram"}
+
+
+@app.post("/bosta-webhook")
+def handle_bosta_webhook(request: Request):
+    data = request.json()
+    
+    state = data.get("state")
+    tracking = data.get("trackingNumber")
+    business_ref = data.get("businessReference", "")
+    
+    if state == 103:
+        msg = f"📦 🦺Emergence🦺 \nTracking #: {tracking}\nBusiness Ref: {business_ref}\nStatus: Awaiting your action"
+        send_telegram(EME, CON_CHAT_ID, msg)
+        return {"status": "notified"}
+    elif state == 100:
+        msg = f"📦 🦺Emergence🦺 \nTracking #: {tracking}\nBusiness Ref: {business_ref}\nStatus: Package Lost"
+        send_telegram(EME, CON_CHAT_ID, msg)
+        return {"status": "notified"}
+    elif state == 101:
+        msg = f"📦 🦺Emergence🦺 \nTracking #: {tracking}\nBusiness Ref: {business_ref}\nStatus: Package Damaged"
+        send_telegram(EME, CON_CHAT_ID, msg)
+        return {"status": "notified"}
+    else:
+        return {"status": "ignored", "state": state}
