@@ -251,9 +251,7 @@ last_order_name = None
 BOSTA_TOKEN = "3df1df2a6ca817c65b3144ef2ad57f1290a87105e8faf6c28db88cdafd11b417"
 BOSTA_URL = "https://app.bosta.co/api/v2/deliveries/mass-awb"
 
-SUPABASE_URL = "https://pajbauwtxjhdobsgdevx.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhamJhdXd0eGpoZG9ic2dkZXZ4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MjExNzY5NSwiZXhwIjoyMDY3NjkzNjk1fQ.ZsBZbtDq1ETmPAz0SCQ1979Li8y4-ouUQycrUlqTiNo"
-BUCKET_NAME = "pdfs"
+TELEGRAM_BOT_TOKEN = "7370583584:AAFOaJsnq5uYa-qWWjJlSbqfFvCHVaYbGTg"
 
 @app.post("/tracking")
 async def save_and_send_tracking(request: Request):
@@ -261,8 +259,7 @@ async def save_and_send_tracking(request: Request):
 
     data = await request.json()
     last_tracking_number = data.get("tracking_number", "")
-    last_order_name = data.get("name", "")
-    last_order_name = last_order_name.replace(".1", "")
+    last_order_name = data.get("name", "").replace(".1", "")
 
     response_data = {
         "status": "stored",
@@ -288,24 +285,24 @@ async def save_and_send_tracking(request: Request):
         base64_pdf = res_json.get("data")
         if base64_pdf:
             pdf_bytes = base64.b64decode(base64_pdf)
-            today = datetime.date.today().isoformat()
             filename = f"{last_order_name}.pdf"
-            storage_path = f"{today}/{filename}"
 
-            upload_url = f"{SUPABASE_URL}/storage/v1/object/{BUCKET_NAME}/{storage_path}"
-            upload_headers = {
-                "Authorization": f"Bearer {SUPABASE_KEY}",
-                "Content-Type": "application/pdf"
+            telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
+            files = {
+                "document": (filename, pdf_bytes, "application/pdf")
+            }
+            telegram_data = {
+                "chat_id": OTHER_CHAT_ID,
+                "caption": f"📄 AirwayBill for {last_order_name}"
             }
 
-            upload_response = requests.put(upload_url, headers=upload_headers, data=pdf_bytes)
+            telegram_response = requests.post(telegram_url, data=telegram_data, files=files)
 
-            if upload_response.status_code in [200, 201]:
-                response_data["upload_status"] = "success"
-                response_data["file_url"] = f"{SUPABASE_URL}/storage/v1/object/public/{BUCKET_NAME}/{storage_path}"
+            if telegram_response.status_code == 200:
+                response_data["telegram_status"] = "sent"
             else:
-                response_data["upload_status"] = "failed"
-                response_data["upload_error"] = upload_response.text
+                response_data["telegram_status"] = "failed"
+                response_data["telegram_error"] = telegram_response.text
         else:
             response_data["error"] = "No base64 PDF found in Bosta response."
 
