@@ -408,6 +408,7 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
 
 
 
+
 seen_trackings = TTLCache(maxsize=100, ttl=6000)
 
 @app.post("/tracking")
