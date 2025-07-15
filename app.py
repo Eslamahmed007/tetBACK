@@ -3,7 +3,7 @@ import base64
 import datetime
 from fastapi.responses import FileResponse
 import os, requests
-from weasyprint import HTML
+from weasyprint import HTML , CSS
 from cachetools import TTLCache
 
 app = FastAPI()
@@ -291,7 +291,20 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
     ship_addr = order.get("shipping_address",{})
 
     html = f"""
-    <html><body>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <style>
+        @font-face {{
+            font-family: 'Cairo';
+            src: url('fonts/Cairo-Regular.ttf');
+        }}
+        body {{
+            font-family: 'Cairo', sans-serif;
+        }}
+      </style>
+    </head>
+    <body>
       <p style="text-align: right; margin: 0; font-size: 1.4em;">
         <strong>{order['name']}</strong>
       </p>
@@ -347,18 +360,19 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
         <tr><td style="padding: 8px;"><strong>Total:</strong></td><td style="padding: 8px;"><strong>{total_price:.2f} EGP</strong></td></tr>
     """
 
-    if paid_amount>0:
+    if paid_amount > 0:
         html += f"""
         <tr>
           <td style="padding:8px;"><strong>Paid amount:</strong></td>
           <td style="padding:8px;"><strong>{paid_amount:.2f} EGP</strong></td>
         </tr>"""
-    if outstanding>0:
+    if outstanding > 0:
         html += f"""
         <tr>
           <td style="padding:8px;"><strong>Outstanding:</strong></td>
           <td style="padding:8px;"><strong>{outstanding:.2f} EGP</strong></td>
         </tr>"""
+
     html += "</table>"
 
     if note:
@@ -387,16 +401,19 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
 
     html_file = f"{order['name']}.html"
     pdf_file  = f"{order['name']}.pdf"
-    with open(html_file,"w",encoding="utf-8") as f: f.write(html)
-    HTML(html_file).write_pdf(pdf_file)
+    with open(html_file, "w", encoding="utf-8") as f:
+        f.write(html)
 
+    css = CSS("fonts/Cairo-Regular.ttf")
 
-    tg_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
-    with open(pdf_file,"rb") as f:
+    HTML(html_file, base_url=".").write_pdf(pdf_file, stylesheets=[css])
+
+    tg_url = f"https://api.telegram.org/bot{os.getenv('TELEGRAM_BOT_TOKEN')}/sendDocument"
+    with open(pdf_file, "rb") as f:
         requests.post(tg_url, data={
-            "chat_id": OTHER_CHAT_ID,
+            "chat_id": os.getenv("OTHER_CHAT_ID"),
             "caption": f"📄 Invoice for {order['name']}"
-        }, files={"document":(pdf_file,f,"application/pdf")})
+        }, files={"document": (pdf_file, f, "application/pdf")})
 
     os.remove(html_file)
     os.remove(pdf_file)
