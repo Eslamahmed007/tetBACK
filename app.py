@@ -4,7 +4,7 @@ import datetime
 from fastapi.responses import FileResponse
 import os, requests
 from weasyprint import HTML
-
+from cachetools import TTLCache
 
 app = FastAPI()
 
@@ -386,7 +386,7 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
     """
 
     html_file = f"{order['name']}.html"
-    pdf_file  = f"{order['name']}_invoice.pdf"
+    pdf_file  = f"{order['name']}.pdf"
     with open(html_file,"w",encoding="utf-8") as f: f.write(html)
     HTML(html_file).write_pdf(pdf_file)
 
@@ -401,6 +401,8 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
     os.remove(html_file)
     os.remove(pdf_file)
 
+seen_trackings = TTLCache(maxsize=100, ttl=6000)
+
 @app.post("/tracking")
 async def save_and_send_tracking(request: Request):
     data = await request.json()
@@ -408,21 +410,25 @@ async def save_and_send_tracking(request: Request):
     tracking   = data.get("tracking_number", "")
     order_name = data.get("name", "").replace(".1", "")
 
+    if tracking in seen_trackings:
+        return {"status": "duplicate_tracking_skipped"}
+
+    seen_trackings[tracking] = True
+
     res = requests.post(
         BOSTA_URL,
-        json={"trackingNumbers": tracking, "requestedAwbType":"A6","lang":"en"},
+        json={"trackingNumbers": tracking, "requestedAwbType": "A6", "lang": "en"},
         headers={"Authorization": BOSTA_TOKEN}
     )
     res.raise_for_status()
     awb_b64 = res.json().get("data", "")
     if awb_b64:
         awb_pdf = base64.b64decode(awb_b64)
-
         tg_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
         requests.post(tg_url, data={
             "chat_id": OTHER_CHAT_ID,
             "caption": f"📄 AirwayBill for {order_name}"
-        }, files={"document": (f"{order_name}.pdf", awb_pdf, "application/pdf")})
+        }, files={"document": (f"{order_name}ب.pdf", awb_pdf, "application/pdf")})
 
     order_id = data.get("order_id")
     shop_url = f"https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}/orders/{order_id}.json"
@@ -434,7 +440,6 @@ async def save_and_send_tracking(request: Request):
     order = shop_resp.json().get("order", {})
 
     image_map = fetch_product_images(order.get("line_items", []))
-
     send_invoice_to_telegram(order, image_map)
 
     return {"status": "awb_sent_and_invoice_sent"}
