@@ -252,7 +252,7 @@ BOSTA_TOKEN = "3df1df2a6ca817c65b3144ef2ad57f1290a87105e8faf6c28db88cdafd11b417"
 BOSTA_URL = "https://app.bosta.co/api/v2/deliveries/mass-awb"
 
 TELEGRAM_BOT_TOKEN = "7370583584:AAFOaJsnq5uYa-qWWjJlSbqfFvCHVaYbGTg"
-OTHER_CHAT_ID = "5660125152"
+TELEGRAM_CHAT_ID = "5660125152"
 
 SHOP_NAME     = "korean-beauty-s"
 API_VERSION   = "2024-07"
