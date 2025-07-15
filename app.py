@@ -298,6 +298,12 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
         @font-face {{
             font-family: 'Cairo';
             src: url('fonts/Cairo-Regular.ttf') format('truetype');
+            font-weight: normal;
+        }}
+        @font-face {{
+            font-family: 'Cairo';
+            src: url('fonts/Cairo-Bold.ttf') format('truetype');
+            font-weight: bold;
         }}
         body {{
             font-family: 'Cairo', sans-serif;
@@ -321,8 +327,8 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
         p {{
             margin: 0.4em 0;
         }}
-        .section {{
-            margin-bottom: 0.8em;
+        strong {{
+            font-weight: bold;
         }}
       </style>
     </head>
@@ -427,7 +433,6 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
 
     os.remove(html_file)
     os.remove(pdf_file)
-
 
 
 
