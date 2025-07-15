@@ -9,16 +9,21 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     libxml2 \
     libxslt1.1 \
-    libjpeg-dev \
-    zlib1g-dev \
+    libgobject-2.0-0 \
+    libglib2.0-0 \
     libpangocairo-1.0-0 \
+    libpangoft2-1.0-0 \
     fonts-liberation \
+    fonts-freefont-ttf \
     curl \
-    git \
-    && apt-get clean
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
 
 WORKDIR /app
+
 COPY . .
+
 
 RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
