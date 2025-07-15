@@ -262,35 +262,60 @@ ACCESS_TOKEN  = "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"
 
 @app.post("/tracking")
 async def save_and_send_tracking(request: Request):
+    global last_tracking_number, last_order_name
+
     data = await request.json()
+    last_tracking_number = data.get("tracking_number", "")
+    last_order_name = data.get("name", "").replace(".1", "")
 
-    tracking   = data.get("tracking_number", "")
-    order_name = data.get("name", "").replace(".1", "")
+    response_data = {
+        "status": "stored",
+        "tracking_number": last_tracking_number,
+        "name": last_order_name
+    }
 
-    res = requests.post(
-        BOSTA_URL,
-        json={"trackingNumbers": tracking, "requestedAwbType":"A6","lang":"en"},
-        headers={"Authorization": BOSTA_TOKEN}
-    )
-    res.raise_for_status()
-    awb_b64 = res.json().get("data", "")
-    if awb_b64:
-        awb_pdf = base64.b64decode(awb_b64)
+    payload = {
+        "trackingNumbers": last_tracking_number,
+        "requestedAwbType": "A6",
+        "lang": "en"
+    }
+    headers = {
+        "Authorization": BOSTA_TOKEN
+    }
 
-        tg_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
-        requests.post(tg_url, data={
-            "chat_id": OTHER_CHAT_ID,
-            "caption": f"📄 AirwayBill for {order_name}"
-        }, files={"document": (f"{order_name}.pdf", awb_pdf, "application/pdf")})
+    try:
+        res = requests.post(BOSTA_URL, json=payload, headers=headers)
+        res.raise_for_status()
+        res_json = res.json()
+        response_data["bosta_response"] = res_json
 
-    order_id = data.get("order_id")
-    shop_url = f"https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}/orders/{order_id}.json"
-    shop_resp = requests.get(
-        shop_url,
-        headers={"X-Shopify-Access-Token": ACCESS_TOKEN}
-    )
-    shop_resp.raise_for_status()
-    order = shop_resp.json().get("order", {})
+        base64_pdf = res_json.get("data")
+        if base64_pdf:
+            pdf_bytes = base64.b64decode(base64_pdf)
+            filename = f"{last_order_name}.pdf"
 
+            telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
+            files = {
+                "document": (filename, pdf_bytes, "application/pdf")
+            }
+            telegram_data = {
+                "chat_id": TELEGRAM_CHAT_ID,
+                "caption": f"📄 AirwayBill for {last_order_name}"
+            }
 
-    return {"status": "awb_sent_and_invoice_sent"}
+            telegram_response = requests.post(telegram_url, data=telegram_data, files=files)
+
+            if telegram_response.status_code == 200:
+                response_data["telegram_status"] = "sent"
+            else:
+                response_data["telegram_status"] = "failed"
+                response_data["telegram_error"] = telegram_response.text
+        else:
+            response_data["error"] = "No base64 PDF found in Bosta response."
+
+    except Exception as e:
+        response_data["error"] = str(e)
+        if "res" in locals():
+            response_data["bosta_raw"] = res.text
+
+    return response_data
