@@ -447,6 +447,8 @@ async def save_and_send_tracking(request: Request):
     tracking   = data.get("tracking_number", "")
     order_name = data.get("name", "").replace(".1", "")
 
+    if tracking in seen_trackings:
+        return {"status": "duplicate_tracking_skipped"}
 
 
     seen_trackings[tracking] = True
