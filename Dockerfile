@@ -9,7 +9,6 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     libxml2 \
     libxslt1.1 \
-    libgobject-2.0-0 \
     libglib2.0-0 \
     libpangocairo-1.0-0 \
     libpangoft2-1.0-0 \
