@@ -3,7 +3,6 @@ import base64
 import datetime
 from fastapi.responses import FileResponse
 import os, requests
-from weasyprint import HTML
 
 
 app = FastAPI()
