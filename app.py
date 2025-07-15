@@ -170,7 +170,7 @@ async def handle_order(request: Request):
 
         return {"status": "paid - skipped"}
     
-    elif "PREPAID" in codes_text:
+    elif "Instapay" in data.get("payment_gateway_names", []):
         message = formatt_order_message(data)
         send_telegram(PRE_BOT_TOKEN, PRE_CHAT_ID, message)
         return {"status": "sent to prepaid bot"}
