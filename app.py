@@ -273,7 +273,6 @@ def fetch_product_images(line_items):
             image_map[pid] = img
     return image_map
 
-
 def send_invoice_to_telegram(order: dict, image_map: dict):
     subtotal        = float(order.get("current_subtotal_price", 0))
     total_discounts = float(order.get("current_total_discounts", 0))
@@ -284,11 +283,11 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
         shipping_price = float(shipping_lines[0].get("price", 0))
     total_price     = float(order.get("current_total_price", 0))
 
-    paid_amount = total_price if order.get("financial_status","").lower()=="paid" else 0
+    paid_amount = total_price if order.get("financial_status", "").lower() == "paid" else 0
     outstanding = total_price - paid_amount
 
-    note = order.get("note","")
-    ship_addr = order.get("shipping_address",{})
+    note = order.get("note", "")
+    ship_addr = order.get("shipping_address", {})
 
     html = f"""
     <html>
@@ -297,7 +296,13 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
       <style>
         @font-face {{
             font-family: 'Cairo';
-            src: url('fonts/Cairo-Regular.ttf');
+            src: url('fonts/Cairo-Regular.ttf') format('truetype');
+            font-weight: normal;
+        }}
+        @font-face {{
+            font-family: 'Cairo';
+            src: url('fonts/Cairo-Bold.ttf') format('truetype');
+            font-weight: bold;
         }}
         body {{
             font-family: 'Cairo', sans-serif;
@@ -329,8 +334,8 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
     for li in order.get("line_items", []):
         qty   = li.get("quantity", 0)
         if qty <= 0: continue
-        title = li.get("title","")
-        price = float(li.get("price",0))
+        title = li.get("title", "")
+        price = float(li.get("price", 0))
         img   = image_map.get(li.get("product_id"), "")
 
         html += f"""
@@ -343,7 +348,7 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
           </td>
           <td style="padding: 8px; border: 1px solid #ddd; font-size: 1.1em;">
             <strong>{title}</strong>
-            {"<br/><small>"+li.get("variant_title","")+"<small>" if li.get("variant_title") else ""}
+            {"<br/><small>" + li.get("variant_title", "") + "</small>" if li.get("variant_title") else ""}
           </td>
           <td style="padding: 8px; border: 1px solid #ddd;">{price:.2f} EGP</td>
         </tr>
@@ -372,7 +377,6 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
           <td style="padding:8px;"><strong>Outstanding:</strong></td>
           <td style="padding:8px;"><strong>{outstanding:.2f} EGP</strong></td>
         </tr>"""
-
     html += "</table>"
 
     if note:
@@ -403,20 +407,18 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
     pdf_file  = f"{order['name']}.pdf"
     with open(html_file, "w", encoding="utf-8") as f:
         f.write(html)
+    HTML(html_file, base_url=".").write_pdf(pdf_file)
 
-    css = CSS("fonts/Cairo-Regular.ttf")
-
-    HTML(html_file, base_url=".").write_pdf(pdf_file, stylesheets=[css])
-
-    tg_url = f"https://api.telegram.org/bot{os.getenv('TELEGRAM_BOT_TOKEN')}/sendDocument"
+    tg_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
     with open(pdf_file, "rb") as f:
         requests.post(tg_url, data={
-            "chat_id": os.getenv("OTHER_CHAT_ID"),
+            "chat_id": OTHER_CHAT_ID,
             "caption": f"📄 Invoice for {order['name']}"
         }, files={"document": (pdf_file, f, "application/pdf")})
 
     os.remove(html_file)
     os.remove(pdf_file)
+
 
 seen_trackings = TTLCache(maxsize=100, ttl=6000)
 
@@ -427,8 +429,7 @@ async def save_and_send_tracking(request: Request):
     tracking   = data.get("tracking_number", "")
     order_name = data.get("name", "").replace(".1", "")
 
-    if tracking in seen_trackings:
-        return {"status": "duplicate_tracking_skipped"}
+
 
     seen_trackings[tracking] = True
 
