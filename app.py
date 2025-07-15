@@ -8,20 +8,20 @@ from weasyprint import HTML
 
 app = FastAPI()
 
-MAIL_TOKEN = "8113524955:AAEQovNmZr-38ogi3UQBgrC20rNtwIslJ_c"
-EME = "7890080421:AAFs4eXADn47TTFzhkjKSVsKgP8-2TYBNcw"
+MAIL_TOKEN = os.getenv("MAIL_TOKEN")
+EME = os.getenv("EME")
 
-CON_BOT_TOKEN = "7682957953:AAE_UVOfIFKNQ3dMANjsH6JMwLTAbocI8ys"
-CON_CHAT_ID = "5660125152"
+CON_BOT_TOKEN = os.getenv("CON_BOT_TOKEN")
+CON_CHAT_ID = os.getenv("CON_CHAT_ID")
 
-PRE_BOT_TOKEN = "7228712143:AAGjZXlM_i2nNI6xsTvRgbokge1o9lQjf-8"
-PRE_CHAT_ID = "5660125152"
+PRE_BOT_TOKEN = os.getenv("PRE_BOT_TOKEN")
+PRE_CHAT_ID = os.getenv("PRE_CHAT_ID")
 
-ALEX_BOT_TOKEN = "8020725694:AAHVb-njS2E9cTWmZXdNxUjBq3m58tlFH_A"
-ALEX_CHAT_ID = "5660125152"
+ALEX_BOT_TOKEN = os.getenv("ALEX_BOT_TOKEN")
+ALEX_CHAT_ID = os.getenv("ALEX_CHAT_ID")
 
-OTHER_BOT_TOKEN = "7399814752:AAGI-IAMNxImH6ATsY3T3iRf8Y1EAvn-7F0"
-OTHER_CHAT_ID = "5660125152"
+OTHER_BOT_TOKEN = os.getenv("OTHER_BOT_TOKEN")
+OTHER_CHAT_ID = os.getenv("OTHER_CHAT_ID")
 
 def send_telegram(token, chat_id, message):
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -249,15 +249,15 @@ def handle_bosta_webhook(request: Request):
 last_tracking_number = None
 last_order_name = None
 
-BOSTA_TOKEN = "3df1df2a6ca817c65b3144ef2ad57f1290a87105e8faf6c28db88cdafd11b417"
-BOSTA_URL = "https://app.bosta.co/api/v2/deliveries/mass-awb"
+BOSTA_TOKEN = os.getenv("BOSTA_TOKEN")
+BOSTA_URL = os.getenv("BOSTA_URL")
 
-TELEGRAM_BOT_TOKEN = "7370583584:AAFOaJsnq5uYa-qWWjJlSbqfFvCHVaYbGTg"
-OTHER_CHAT_ID = "5660125152"
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+OTHER_CHAT_ID = os.getenv("OTHER_CHAT_ID")
 
-SHOP_NAME     = "korean-beauty-s"
-API_VERSION   = "2024-07"
-ACCESS_TOKEN  = "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"
+SHOP_NAME     = os.getenv("SHOP_NAME")
+API_VERSION   = os.getenv("API_VERSION")
+ACCESS_TOKEN  = os.getenv("ACCESS_TOKEN")
 
 def fetch_product_images(line_items):
     """يرجع dict mapping product_id -> featured_image.src"""
