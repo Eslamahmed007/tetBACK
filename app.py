@@ -3,6 +3,8 @@ import base64
 import datetime
 from fastapi.responses import FileResponse
 import os, requests
+import pdfkit
+import pprint
 
 app = FastAPI()
 
@@ -244,7 +246,6 @@ def handle_bosta_webhook(request: Request):
         return {"status": "ignored", "state": state}
 
 
-
 last_tracking_number = None
 last_order_name = None
 
@@ -252,63 +253,187 @@ BOSTA_TOKEN = "3df1df2a6ca817c65b3144ef2ad57f1290a87105e8faf6c28db88cdafd11b417"
 BOSTA_URL = "https://app.bosta.co/api/v2/deliveries/mass-awb"
 
 TELEGRAM_BOT_TOKEN = "7370583584:AAFOaJsnq5uYa-qWWjJlSbqfFvCHVaYbGTg"
+OTHER_CHAT_ID = "5660125152"
+
+SHOP_NAME     = "korean-beauty-s"
+API_VERSION   = "2024-07"
+ACCESS_TOKEN  = "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"
+
+def fetch_product_images(line_items):
+    """يرجع dict mapping product_id -> featured_image.src"""
+    image_map = {}
+    for li in line_items:
+        pid = li.get("product_id")
+        if pid and pid not in image_map:
+            url = f"https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}/products/{pid}.json?fields=image"
+            r = requests.get(url, headers={"X-Shopify-Access-Token": ACCESS_TOKEN})
+            r.raise_for_status()
+            prod = r.json().get("product", {})
+            img = prod.get("image", {}).get("src", "")
+            image_map[pid] = img
+    return image_map
+
+
+def send_invoice_to_telegram(order: dict, image_map: dict):
+    subtotal        = float(order.get("current_subtotal_price", 0))
+    total_discounts = float(order.get("current_total_discounts", 0))
+    true_subtotal   = subtotal + total_discounts
+    shipping_price  = 0
+    shipping_lines  = order.get("shipping_lines", [])
+    if shipping_lines:
+        shipping_price = float(shipping_lines[0].get("price", 0))
+    total_price     = float(order.get("current_total_price", 0))
+
+    paid_amount = total_price if order.get("financial_status","").lower()=="paid" else 0
+    outstanding = total_price - paid_amount
+
+    note = order.get("note","")
+    ship_addr = order.get("shipping_address",{})
+
+    html = f"""
+    <html><body>
+      <p style="text-align: right; margin: 0; font-size: 1.4em;">
+        <strong>{order['name']}</strong>
+      </p>
+      <div style="margin: 1em 0;">
+        <img src="https://i.ibb.co/dMZ03Zc/2d96914c-cac1-40a7-b8b8-bd3286ad39fa.png"
+             alt="checkout-logo" style="max-height: 100px;" />
+      </div>
+      <hr />
+      <h3>Item Details</h3>
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 1.5em;">
+        <thead>
+          <tr style="background-color: #f5f5f5;">
+            <th style="padding: 8px; border: 1px solid #ddd;">Product</th>
+            <th style="padding: 8px; border: 1px solid #ddd;">Quantity</th>
+            <th style="padding: 8px; border: 1px solid #ddd;">Item</th>
+            <th style="padding: 8px; border: 1px solid #ddd;">Price</th>
+          </tr>
+        </thead>
+        <tbody>
+    """
+
+    for li in order.get("line_items", []):
+        qty   = li.get("quantity", 0)
+        if qty <= 0: continue
+        title = li.get("title","")
+        price = float(li.get("price",0))
+        img   = image_map.get(li.get("product_id"), "")
+
+        html += f"""
+        <tr>
+          <td style="padding: 8px; border: 1px solid #ddd;">
+            <img src="{img}" style="max-width: 60px;" />
+          </td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
+            <span style="font-size: 1.2em;"><strong>{qty}</strong></span>
+          </td>
+          <td style="padding: 8px; border: 1px solid #ddd; font-size: 1.1em;">
+            <strong>{title}</strong>
+            {"<br/><small>"+li.get("variant_title","")+"<small>" if li.get("variant_title") else ""}
+          </td>
+          <td style="padding: 8px; border: 1px solid #ddd;">{price:.2f} EGP</td>
+        </tr>
+        """
+
+    html += f"""
+        </tbody>
+      </table>
+      <h3>Payment Summary</h3>
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 1.5em;">
+        <tr><td style="padding: 8px;">Subtotal:</td><td style="padding: 8px;">{true_subtotal:.2f} EGP</td></tr>
+        <tr><td style="padding: 8px;">Discount:</td><td style="padding: 8px;">{total_discounts:.2f} EGP</td></tr>
+        <tr><td style="padding: 8px;">Shipping:</td><td style="padding: 8px;">{shipping_price:.2f} EGP</td></tr>
+        <tr><td style="padding: 8px;"><strong>Total:</strong></td><td style="padding: 8px;"><strong>{total_price:.2f} EGP</strong></td></tr>
+    """
+
+    if paid_amount>0:
+        html += f"""
+        <tr>
+          <td style="padding:8px;"><strong>Paid amount:</strong></td>
+          <td style="padding:8px;"><strong>{paid_amount:.2f} EGP</strong></td>
+        </tr>"""
+    if outstanding>0:
+        html += f"""
+        <tr>
+          <td style="padding:8px;"><strong>Outstanding:</strong></td>
+          <td style="padding:8px;"><strong>{outstanding:.2f} EGP</strong></td>
+        </tr>"""
+    html += "</table>"
+
+    if note:
+        html += f"""
+      <h3>Note</h3>
+      <div style="font-size:1.1em;">{note}</div>"""
+
+    if ship_addr:
+        html += f"""
+      <h3>Shipping Details</h3>
+      <div style="border:1px solid #000; padding:1em; font-size:1.1em; margin-bottom:1em; line-height:1.8;">
+        <strong>{ship_addr.get('name')}</strong><br/>
+        {ship_addr.get('address1')}<br/>
+        {ship_addr.get('city')} {ship_addr.get('province_code')} {ship_addr.get('zip') or ''}<br/>
+        {ship_addr.get('phone')}<br/>
+        {ship_addr.get('country')}
+      </div>"""
+
+    html += """
+      <p style="margin-top:2em;">
+        For questions, contact us via WhatsApp <u><strong>+20 120 123 8905</strong></u><br/>
+        Instagram: <strong>Koreanbeautysonlineshop</strong>
+      </p>
+    </body></html>
+    """
+
+    html_file = f"{order['name']}.html"
+    pdf_file  = f"{order['name']}_invoice.pdf"
+    with open(html_file,"w",encoding="utf-8") as f: f.write(html)
+    pdfkit.from_file(html_file, pdf_file)
+
+    tg_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
+    with open(pdf_file,"rb") as f:
+        requests.post(tg_url, data={
+            "chat_id": OTHER_CHAT_ID,
+            "caption": f"📄 Invoice for {order['name']}"
+        }, files={"document":(pdf_file,f,"application/pdf")})
+
+    os.remove(html_file)
+    os.remove(pdf_file)
 
 @app.post("/tracking")
 async def save_and_send_tracking(request: Request):
-    global last_tracking_number, last_order_name
-
     data = await request.json()
-    last_tracking_number = data.get("tracking_number", "")
-    last_order_name = data.get("name", "").replace(".1", "")
 
-    response_data = {
-        "status": "stored",
-        "tracking_number": last_tracking_number,
-        "name": last_order_name
-    }
+    tracking   = data.get("tracking_number", "")
+    order_name = data.get("name", "").replace(".1", "")
 
-    payload = {
-        "trackingNumbers": last_tracking_number,
-        "requestedAwbType": "A6",
-        "lang": "en"
-    }
-    headers = {
-        "Authorization": BOSTA_TOKEN
-    }
+    res = requests.post(
+        BOSTA_URL,
+        json={"trackingNumbers": tracking, "requestedAwbType":"A6","lang":"en"},
+        headers={"Authorization": BOSTA_TOKEN}
+    )
+    res.raise_for_status()
+    awb_b64 = res.json().get("data", "")
+    if awb_b64:
+        awb_pdf = base64.b64decode(awb_b64)
 
-    try:
-        res = requests.post(BOSTA_URL, json=payload, headers=headers)
-        res.raise_for_status()
-        res_json = res.json()
-        response_data["bosta_response"] = res_json
+        tg_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
+        requests.post(tg_url, data={
+            "chat_id": OTHER_CHAT_ID,
+            "caption": f"📄 AirwayBill for {order_name}"
+        }, files={"document": (f"{order_name}.pdf", awb_pdf, "application/pdf")})
 
-        base64_pdf = res_json.get("data")
-        if base64_pdf:
-            pdf_bytes = base64.b64decode(base64_pdf)
-            filename = f"{last_order_name}.pdf"
+    order_id = data.get("order_id")
+    shop_url = f"https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}/orders/{order_id}.json"
+    shop_resp = requests.get(
+        shop_url,
+        headers={"X-Shopify-Access-Token": ACCESS_TOKEN}
+    )
+    shop_resp.raise_for_status()
+    order = shop_resp.json().get("order", {})
 
-            telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
-            files = {
-                "document": (filename, pdf_bytes, "application/pdf")
-            }
-            telegram_data = {
-                "chat_id": OTHER_CHAT_ID,
-                "caption": f"📄 AirwayBill for {last_order_name}"
-            }
+    image_map = fetch_product_images(order.get("line_items", []))
 
-            telegram_response = requests.post(telegram_url, data=telegram_data, files=files)
+    send_invoice_to_telegram(order, image_map)
 
-            if telegram_response.status_code == 200:
-                response_data["telegram_status"] = "sent"
-            else:
-                response_data["telegram_status"] = "failed"
-                response_data["telegram_error"] = telegram_response.text
-        else:
-            response_data["error"] = "No base64 PDF found in Bosta response."
-
-    except Exception as e:
-        response_data["error"] = str(e)
-        if "res" in locals():
-            response_data["bosta_raw"] = res.text
-
-    return response_data
+    return {"status": "awb_sent_and_invoice_sent"}
