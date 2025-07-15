@@ -3,8 +3,8 @@ import base64
 import datetime
 from fastapi.responses import FileResponse
 import os, requests
-import pdfkit
-import pprint
+from weasyprint import HTML
+
 
 app = FastAPI()
 
@@ -388,7 +388,8 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
     html_file = f"{order['name']}.html"
     pdf_file  = f"{order['name']}_invoice.pdf"
     with open(html_file,"w",encoding="utf-8") as f: f.write(html)
-    pdfkit.from_file(html_file, pdf_file)
+    HTML(html_file).write_pdf(pdf_file)
+
 
     tg_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
     with open(pdf_file,"rb") as f:
