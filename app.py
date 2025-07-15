@@ -259,6 +259,21 @@ SHOP_NAME     = os.getenv("SHOP_NAME")
 API_VERSION   = os.getenv("API_VERSION")
 ACCESS_TOKEN  = os.getenv("ACCESS_TOKEN")
 
+
+def fetch_product_images(line_items):
+
+    image_map = {}
+    for li in line_items:
+        pid = li.get("product_id")
+        if pid and pid not in image_map:
+            url = f"https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}/products/{pid}.json?fields=image"
+            r = requests.get(url, headers={"X-Shopify-Access-Token": ACCESS_TOKEN})
+            r.raise_for_status()
+            prod = r.json().get("product", {})
+            img = prod.get("image", {}).get("src", "")
+            image_map[pid] = img
+    return image_map
+
 def send_invoice_to_telegram(order: dict, image_map: dict):
     subtotal        = float(order.get("current_subtotal_price", 0))
     total_discounts = float(order.get("current_total_discounts", 0))
@@ -283,35 +298,49 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
         @font-face {{
             font-family: 'Cairo';
             src: url('fonts/Cairo-Regular.ttf') format('truetype');
-            font-weight: normal;
-        }}
-        @font-face {{
-            font-family: 'Cairo';
-            src: url('fonts/Cairo-Bold.ttf') format('truetype');
-            font-weight: bold;
         }}
         body {{
             font-family: 'Cairo', sans-serif;
+            margin: 0;
+            padding: 0;
+            font-size: 12px;
+            line-height: 1.4;
+        }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 0.8em;
+        }}
+        th, td {{
+            padding: 4px;
+            border: 1px solid #ddd;
+        }}
+        h3 {{
+            margin: 0.6em 0 0.4em;
+        }}
+        p {{
+            margin: 0.4em 0;
+        }}
+        .section {{
+            margin-bottom: 0.8em;
         }}
       </style>
     </head>
     <body>
-      <p style="text-align: right; margin: 0; font-size: 1.4em;">
-        <strong>{order['name']}</strong>
-      </p>
-      <div style="margin: 1em 0;">
+      <p style="text-align: right; margin: 0; font-size: 1.3em;"><strong>{order['name']}</strong></p>
+      <div style="margin: 0.5em 0;">
         <img src="https://i.ibb.co/dMZ03Zc/2d96914c-cac1-40a7-b8b8-bd3286ad39fa.png"
-             alt="checkout-logo" style="max-height: 100px;" />
+             alt="checkout-logo" style="max-height: 80px;" />
       </div>
       <hr />
       <h3>Item Details</h3>
-      <table style="width: 100%; border-collapse: collapse; margin-bottom: 1.5em;">
+      <table>
         <thead>
           <tr style="background-color: #f5f5f5;">
-            <th style="padding: 8px; border: 1px solid #ddd;">Product</th>
-            <th style="padding: 8px; border: 1px solid #ddd;">Quantity</th>
-            <th style="padding: 8px; border: 1px solid #ddd;">Item</th>
-            <th style="padding: 8px; border: 1px solid #ddd;">Price</th>
+            <th>Product</th>
+            <th>Quantity</th>
+            <th>Item</th>
+            <th>Price</th>
           </tr>
         </thead>
         <tbody>
@@ -326,17 +355,13 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
 
         html += f"""
         <tr>
-          <td style="padding: 8px; border: 1px solid #ddd;">
-            <img src="{img}" style="max-width: 60px;" />
-          </td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
-            <span style="font-size: 1.2em;"><strong>{qty}</strong></span>
-          </td>
-          <td style="padding: 8px; border: 1px solid #ddd; font-size: 1.1em;">
+          <td><img src="{img}" style="max-width: 50px;" /></td>
+          <td style="text-align: center;"><strong>{qty}</strong></td>
+          <td>
             <strong>{title}</strong>
             {"<br/><small>" + li.get("variant_title", "") + "</small>" if li.get("variant_title") else ""}
           </td>
-          <td style="padding: 8px; border: 1px solid #ddd;">{price:.2f} EGP</td>
+          <td>{price:.2f} EGP</td>
         </tr>
         """
 
@@ -344,25 +369,21 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
         </tbody>
       </table>
       <h3>Payment Summary</h3>
-      <table style="width: 100%; border-collapse: collapse; margin-bottom: 1.5em;">
-        <tr><td style="padding: 8px;">Subtotal:</td><td style="padding: 8px;">{true_subtotal:.2f} EGP</td></tr>
-        <tr><td style="padding: 8px;">Discount:</td><td style="padding: 8px;">{total_discounts:.2f} EGP</td></tr>
-        <tr><td style="padding: 8px;">Shipping:</td><td style="padding: 8px;">{shipping_price:.2f} EGP</td></tr>
-        <tr><td style="padding: 8px;"><strong>Total:</strong></td><td style="padding: 8px;"><strong>{total_price:.2f} EGP</strong></td></tr>
+      <table>
+        <tr><td>Subtotal:</td><td>{true_subtotal:.2f} EGP</td></tr>
+        <tr><td>Discount:</td><td>{total_discounts:.2f} EGP</td></tr>
+        <tr><td>Shipping:</td><td>{shipping_price:.2f} EGP</td></tr>
+        <tr><td><strong>Total:</strong></td><td><strong>{total_price:.2f} EGP</strong></td></tr>
     """
 
     if paid_amount > 0:
         html += f"""
-        <tr>
-          <td style="padding:8px;"><strong>Paid amount:</strong></td>
-          <td style="padding:8px;"><strong>{paid_amount:.2f} EGP</strong></td>
-        </tr>"""
+        <tr><td><strong>Paid amount:</strong></td><td><strong>{paid_amount:.2f} EGP</strong></td></tr>"""
+
     if outstanding > 0:
         html += f"""
-        <tr>
-          <td style="padding:8px;"><strong>Outstanding:</strong></td>
-          <td style="padding:8px;"><strong>{outstanding:.2f} EGP</strong></td>
-        </tr>"""
+        <tr><td><strong>Outstanding:</strong></td><td><strong>{outstanding:.2f} EGP</strong></td></tr>"""
+
     html += "</table>"
 
     if note:
@@ -373,7 +394,7 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
     if ship_addr:
         html += f"""
       <h3>Shipping Details</h3>
-      <div style="border:1px solid #000; padding:1em; font-size:1.1em; margin-bottom:1em; line-height:1.8;">
+      <div style="border:1px solid #000; padding:0.6em; font-size:1.1em; margin-bottom:0.8em; line-height:1.4;">
         <strong>{ship_addr.get('name')}</strong><br/>
         {ship_addr.get('address1')}<br/>
         {ship_addr.get('city')} {ship_addr.get('province_code')} {ship_addr.get('zip') or ''}<br/>
@@ -382,7 +403,7 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
       </div>"""
 
     html += """
-      <p style="margin-top:2em;">
+      <p style="margin-top: 1.2em;">
         For questions, contact us via WhatsApp <u><strong>+20 120 123 8905</strong></u><br/>
         Instagram: <strong>Koreanbeautysonlineshop</strong>
       </p>
@@ -391,8 +412,10 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
 
     html_file = f"{order['name']}.html"
     pdf_file  = f"{order['name']}.pdf"
+
     with open(html_file, "w", encoding="utf-8") as f:
         f.write(html)
+
     HTML(html_file, base_url=".").write_pdf(pdf_file)
 
     tg_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
@@ -404,6 +427,7 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
 
     os.remove(html_file)
     os.remove(pdf_file)
+
 
 
 
