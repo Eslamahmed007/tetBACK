@@ -31,7 +31,8 @@ def send_telegram(token, chat_id, message):
 
 def cancell(order):
     order_number = order.get("order_number")
-    phone = order.get("shipping_address", {}).get("zip", "").replace("+2", "").replace(" ", "")
+    addr = order.get("shipping_address") or {}
+	phone = addr.get("zip", "").replace("+2", "").replace(" ", "")
     phone1 = order.get("shipping_address", {}).get("phone", "").replace("+2", "").replace(" ", "")
     name = order.get("shipping_address", {}).get("name", "")
     msg=f"""📞 Whatsapp number = {phone}
@@ -49,7 +50,8 @@ Hi {name}
 def formatt_order_message(order):
     order_number = order.get("order_number")
     total_price = order.get("total_price") + " EGP"
-    phone = order.get("shipping_address", {}).get("zip", "").replace("+2", "").replace(" ", "")
+    addr = order.get("shipping_address") or {}
+	phone = addr.get("zip", "").replace("+2", "").replace(" ", "")
     phone1 = order.get("shipping_address", {}).get("phone", "").replace("+2", "").replace(" ", "")
     address1 = order.get("shipping_address", {}).get("address1", "")
     name = order.get("shipping_address", {}).get("name", "")
@@ -106,8 +108,9 @@ Hi {name}
 
 def formatt_order_messag(order):
     order_number = order.get("order_number")
-    total_price = order.get("total_price") + " EGP"
-    phone = order.get("shipping_address", {}).get("zip", "").replace("+2", "").replace(" ", "")
+    total_price = order.get("total_outstanding") + " EGP"
+    addr = order.get("shipping_address") or {}
+	phone = addr.get("zip", "").replace("+2", "").replace(" ", "")
     phone1 = order.get("shipping_address", {}).get("phone", "").replace("+2", "").replace(" ", "")
     address1 = order.get("shipping_address", {}).get("address1", "")
     name = order.get("shipping_address", {}).get("name", "")
@@ -167,7 +170,8 @@ def format_order_message(order):
     order_number = order.get("order_number")
     total_price = order.get("total_price") + " EGP"
 
-    phone = order.get("shipping_address", {}).get("zip", "").replace("+2", "").replace(" ", "")
+    addr = order.get("shipping_address") or {}
+	phone = addr.get("zip", "").replace("+2", "").replace(" ", "")
     phone1 = order.get("shipping_address", {}).get("phone", "").replace("+2", "").replace(" ", "")
     address1 = order.get("shipping_address", {}).get("address1", "")
     name = order.get("shipping_address", {}).get("name", "")
@@ -217,9 +221,10 @@ Hi {name}
 
 def format_order_messag(order):
     order_number = order.get("order_number")
-    total_price = order.get("total_price") + " EGP"
+    total_price = order.get("total_outstanding") + " EGP"
 
-    phone = order.get("shipping_address", {}).get("zip", "").replace("+2", "").replace(" ", "")
+    addr = order.get("shipping_address") or {}
+	phone = addr.get("zip", "").replace("+2", "").replace(" ", "")
     phone1 = order.get("shipping_address", {}).get("phone", "").replace("+2", "").replace(" ", "")
     address1 = order.get("shipping_address", {}).get("address1", "")
     name = order.get("shipping_address", {}).get("name", "")
