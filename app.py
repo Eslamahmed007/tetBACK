@@ -302,10 +302,17 @@ async def handle_order(request: Request):
 
         return {"status": "sent"}
 
+seen_edit = TTLCache(maxsize=100, ttl=6000)
+
 @app.post("/edit")
 async def edit_order(request: Request):
     data1 = await request.json() 
     order_id = data1.get("order_edit").get("order_id")
+    if order_id in seen_edit:
+        return {"status": "duplicate_tracking_skipped"}
+
+    seen_edit[order_id] = True
+    
     shop_url = f"https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}/orders/{order_id}.json"
     shop_resp = requests.get(
         shop_url,
