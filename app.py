@@ -29,18 +29,28 @@ def send_telegram(token, chat_id, message):
     requests.post(url, data=payload)
 
 
+def cancell(order):
+    order_number = order.get("order_number")
+    phone = order.get("shipping_address", {}).get("zip", "").replace("+2", "").replace(" ", "")
+    phone1 = order.get("shipping_address", {}).get("phone", "").replace("+2", "").replace(" ", "")
+    name = order.get("shipping_address", {}).get("name", "")
+    msg=f"""📞 Whatsapp number = {phone}
+📱 Phone number = {phone1}
+
+Hi {name}
+
+안녕하세요! to Korean Beautys 🌸
+
+بنتواصل مع حضرتك لتأكيد انه قد تم إلغاء طلبك رقم 007{order_number}"""
+    return msg
+
+
+
 def formatt_order_message(order):
     order_number = order.get("order_number")
     total_price = order.get("total_price") + " EGP"
-
-    note_attrs = order.get("note_attributes", [])
-    phone = ""
-    for attr in note_attrs:
-        if attr.get("name") == "Whatsapp number (IMPORTANT)":
-            phone = attr.get("value", "").replace("+", "").replace(" ", "")
-            break
-
-    phone1 = order.get("shipping_address", {}).get("phone", "").replace("+", "").replace(" ", "")
+    phone = order.get("shipping_address", {}).get("zip", "").replace("+2", "").replace(" ", "")
+    phone1 = order.get("shipping_address", {}).get("phone", "").replace("+2", "").replace(" ", "")
     address1 = order.get("shipping_address", {}).get("address1", "")
     name = order.get("shipping_address", {}).get("name", "")
 
@@ -99,14 +109,8 @@ def format_order_message(order):
     order_number = order.get("order_number")
     total_price = order.get("total_price") + " EGP"
 
-    note_attrs = order.get("note_attributes", [])
-    phone = ""
-    for attr in note_attrs:
-        if attr.get("name") == "Whatsapp number (IMPORTANT)":
-            phone = attr.get("value", "").replace("+", "").replace(" ", "")
-            break
-
-    phone1 = order.get("shipping_address", {}).get("phone", "").replace("+", "").replace(" ", "")
+    phone = order.get("shipping_address", {}).get("zip", "").replace("+2", "").replace(" ", "")
+    phone1 = order.get("shipping_address", {}).get("phone", "").replace("+2", "").replace(" ", "")
     address1 = order.get("shipping_address", {}).get("address1", "")
     name = order.get("shipping_address", {}).get("name", "")
 
@@ -157,10 +161,6 @@ Hi {name}
 async def handle_order(request: Request):
     data = await request.json()
     paid = data.get("financial_status", "")
-    codes = data.get("discount_codes", [])
-    code_values = [c.get("code", "") for c in codes]
-    codes_text = ", ".join(filter(None, code_values)) or "NO"
-    
     if paid=="Paid" or paid=="paid":
 
         return {"status": "paid - skipped"}
@@ -173,6 +173,47 @@ async def handle_order(request: Request):
 
     else:
         message = format_order_message(data)
+
+        province = (
+            data.get("shipping_address", {}).get("province_code", "") or
+            data.get("billing_address", {}).get("province_code", "")
+        ).lower()
+
+
+        if "alx" in province:
+            send_telegram(ALEX_BOT_TOKEN, ALEX_CHAT_ID, message)
+        else:
+            send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
+
+        return {"status": "sent"}
+
+@app.post("/edit")
+async def edit_order(request: Request):
+    data = await request.json()
+    url = "https://web-hock-orders.up.railway.app/webhook"
+    payload = data
+    requests.post(url, json=payload)
+    return {"status": "forwarded"}
+
+    
+
+@app.post("/cancel")
+async def cancel_order(request: Request):
+    data = await request.json()
+    paid = data.get("financial_status", "")
+    
+    if paid=="Paid" or paid=="paid":
+
+        return {"status": "paid - skipped"}
+    
+    elif "Instapay" in data.get("payment_gateway_names", []):
+        message = cancell(data)
+        send_telegram(PRE_BOT_TOKEN, PRE_CHAT_ID, message)
+        return {"status": "sent to prepaid bot"}
+    
+
+    else:
+        message = cancell(data)
 
         province = (
             data.get("shipping_address", {}).get("province_code", "") or
