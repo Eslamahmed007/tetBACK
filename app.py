@@ -189,20 +189,41 @@ async def handle_order(request: Request):
 
 @app.post("/edit")
 async def edit_order(request: Request):
-    data = await request.json() 
-    order_id = data.get("order_edit").get("order_id")
+    data1 = await request.json() 
+    order_id = data1.get("order_edit").get("order_id")
     shop_url = f"https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}/orders/{order_id}.json"
     shop_resp = requests.get(
         shop_url,
         headers={"X-Shopify-Access-Token": ACCESS_TOKEN}
     )
     shop_resp.raise_for_status()
-    order = shop_resp.json().get("order", {})
+    data = shop_resp.json().get("order", {})
+    paid = data.get("financial_status", "")
+    if paid=="Paid" or paid=="paid":
 
-    url = "https://web-hock-orders.up.railway.app/webhook"
-    payload = order
-    requests.post(url, json=payload)
-    return {"status": "forwarded"}
+        return {"status": "paid - skipped"}
+    
+    elif "Instapay" in data.get("payment_gateway_names", []):
+        message = formatt_order_message(data)
+        send_telegram(PRE_BOT_TOKEN, PRE_CHAT_ID, message)
+        return {"status": "sent to prepaid bot"}
+    
+
+    else:
+        message = format_order_message(data)
+
+        province = (
+            data.get("shipping_address", {}).get("province_code", "") or
+            data.get("billing_address", {}).get("province_code", "")
+        ).lower()
+
+
+        if "alx" in province:
+            send_telegram(ALEX_BOT_TOKEN, ALEX_CHAT_ID, message)
+        else:
+            send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
+
+        return {"status": "sent"}
 
     
 
