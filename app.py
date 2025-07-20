@@ -104,6 +104,64 @@ Hi {name}
     return msg1
 
 
+def formatt_order_messag(order):
+    order_number = order.get("order_number")
+    total_price = order.get("total_price") + " EGP"
+    phone = order.get("shipping_address", {}).get("zip", "").replace("+2", "").replace(" ", "")
+    phone1 = order.get("shipping_address", {}).get("phone", "").replace("+2", "").replace(" ", "")
+    address1 = order.get("shipping_address", {}).get("address1", "")
+    name = order.get("shipping_address", {}).get("name", "")
+
+    line_items = order.get("line_items", [])
+    products = ""
+    for item in line_items:
+        if item['title'] =="Cash on Delivery fee" or item['title'] =='Normal Package' or item['title'] =='Premium Package':
+            continue
+        else:
+            products += f"- {item['title']} (x{item['current_quantity']})\n"
+
+    
+
+    
+
+    msg1 = f"""📞 Whatsapp number = {phone}
+📱 Phone number = {phone1}
+
+Hi {name}
+
+안녕하세요! to Korean Beautys 🌸
+
+بنتواصل مع حضرتك لتأكيد طلبك رقم 007{order_number} والدفع عن طريق instapay
+{total_price}
+
+📍 العنوان:
+{address1}
+
+🛍 محتويات الطلب:
+{products}
+
+📦 الطلب هيتم شحنه غدًا وهيوصل خلال 2–5 أيام من يوم التأكيد.
+
+⸻
+
+💳 طرق الدفع (InstaPay):
+1️⃣ InstaPay – تحويل لحساب بنكي:
+رقم الحساب: 01066350652
+
+📸 بعد الدفع، برجاء إرسال صورة الإيصال علشان نبدأ إجراءات الشحن فورًا 💨
+⸻
+
+• في حالة الإلغاء بعد الشحن، بيتم تحصيل مصاريف الشحن (85 جنيه) من حضرتك.
+• في حال كان العنوان غير واضح، يُرجى تحديده بدقة بذكر:
+(المحافظة – المنطقة – أقرب معلم واضح) لتجنب أي تأخير في التوصيل.
+
+شكراً لتفهمك واهتمامك بمنتجات Korean Beautys 💖
+لو في أي استفسار، احنا دايمًا موجودين لخدمتك!"""
+
+    
+    return msg1
+
+
 
 def format_order_message(order):
     order_number = order.get("order_number")
@@ -121,6 +179,58 @@ def format_order_message(order):
             continue
         else:
             products += f"- {item['title']} (x{item['quantity']})\n"
+
+    
+
+    
+
+    msg = f"""📞 Whatsapp number = {phone}
+📱 Phone number = {phone1}
+
+Hi {name}
+
+안녕하세요! to Korean Beautys 🌸  
+
+بنتواصل مع حضرتك لتأكيد طلبك رقم 007{order_number}
+بمبلغ {total_price} 
+
+📍 العنوان:
+{address1}
+
+🛍 محتويات الطلب:
+{products}
+
+📦 الطلب هيتم شحنه غدًا وهيوصل خلال 2–5 أيام من يوم التأكيد.
+
+• في حالة الإلغاء بعد الشحن، بيتم تحصيل *مصاريف الشحن (85 جنيه)* من حضرتك.
+
+• في حال كان العنوان غير واضح، يُرجى تحديده بدقة بذكر:  
+(المحافظة – المنطقة – أقرب معلم واضح) لتجنب أي تأخير في التوصيل.  
+
+⏳ لو معندناش رد خلال 24 ساعة، الطلب بيتم إلغاءه تلقائيًا.
+
+شكراً لتفهمك واهتمامك بمنتجات Korean Beautys 💖
+لو في أي استفسار، احنا موجودين دايمًا لخدمتك."""
+
+    
+    return msg
+
+def format_order_messag(order):
+    order_number = order.get("order_number")
+    total_price = order.get("total_price") + " EGP"
+
+    phone = order.get("shipping_address", {}).get("zip", "").replace("+2", "").replace(" ", "")
+    phone1 = order.get("shipping_address", {}).get("phone", "").replace("+2", "").replace(" ", "")
+    address1 = order.get("shipping_address", {}).get("address1", "")
+    name = order.get("shipping_address", {}).get("name", "")
+
+    line_items = order.get("line_items", [])
+    products = ""
+    for item in line_items:
+        if item['title'] =="Cash on Delivery fee" or item['title'] =='Normal Package' or item['title'] =='Premium Package':
+            continue
+        else:
+            products += f"- {item['title']} (x{item['current_quantity']})\n"
 
     
 
@@ -204,13 +314,13 @@ async def edit_order(request: Request):
         return {"status": "paid - skipped"}
     
     elif "Instapay" in data.get("payment_gateway_names", []):
-        message = formatt_order_message(data)
+        message = formatt_order_messag(data)
         send_telegram(PRE_BOT_TOKEN, PRE_CHAT_ID, message)
         return {"status": "sent to prepaid bot"}
     
 
     else:
-        message = format_order_message(data)
+        message = format_order_messag(data)
 
         province = (
             data.get("shipping_address", {}).get("province_code", "") or
