@@ -190,7 +190,7 @@ async def handle_order(request: Request):
 @app.post("/edit")
 async def edit_order(request: Request):
     data = await request.json() 
-    order_id = data.get("order_id")
+    order_id = data.get("order_edit").get("order_id")
     shop_url = f"https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}/orders/{order_id}.json"
     shop_resp = requests.get(
         shop_url,
