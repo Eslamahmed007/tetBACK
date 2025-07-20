@@ -63,8 +63,8 @@ Hi {name}
 
 안녕하세요! to Korean Beautys 🌸
 
-بنتواصل مع حضرتك لتأكيد طلبك والدفع عن طريق InstaPay بمبلغ
-{total_price} EGP
+بنتواصل مع حضرتك لتأكيد طلبك رقم 007{order_number} والدفع عن طريق instapay
+{total_price}
 
 📍 العنوان:
 {address1}
@@ -130,7 +130,7 @@ Hi {name}
 안녕하세요! to Korean Beautys 🌸  
 
 بنتواصل مع حضرتك لتأكيد طلبك رقم 007{order_number}
-بمبلغ {total_price} EGP
+بمبلغ {total_price} 
 
 📍 العنوان:
 {address1}
