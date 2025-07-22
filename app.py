@@ -360,7 +360,7 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
     total_price     = float(order.get("current_total_price", 0))
 
     paid_amount = total_price if order.get("financial_status", "").lower() == "paid" else 0
-    outstanding = int(order.get("total_outstanding"))
+    outstanding = total_price - paid_amount
 
     note = order.get("note", "")
     ship_addr = order.get("shipping_address", {})
