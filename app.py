@@ -1,10 +1,13 @@
 from fastapi import FastAPI, Request , Query
 import base64
 import datetime
+import logging
 from fastapi.responses import FileResponse
 import os, requests
 from weasyprint import HTML , CSS
 from cachetools import TTLCache
+import time
+
 
 app = FastAPI()
 
@@ -22,6 +25,16 @@ ALEX_CHAT_ID = os.getenv("ALEX_CHAT_ID")
 
 OTHER_BOT_TOKEN = os.getenv("OTHER_BOT_TOKEN")
 OTHER_CHAT_ID = os.getenv("OTHER_CHAT_ID")
+
+BOSTA_TOKEN = os.getenv("BOSTA_TOKEN")
+BOSTA_URL = os.getenv("BOSTA_URL")
+
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+OTHER_CHAT_ID = os.getenv("OTHER_CHAT_ID")
+
+SHOP_NAME     = os.getenv("SHOP_NAME")
+API_VERSION   = os.getenv("API_VERSION")
+ACCESS_TOKEN  = os.getenv("ACCESS_TOKEN")
 
 def send_telegram(token, chat_id, message):
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -105,6 +118,54 @@ Hi {name}
     
     return msg1
 
+def messa(order):
+    order_number = order.get("order_number")
+
+    addr = order.get("shipping_address") or {}
+    phone = addr.get("zip", "")
+    phone1 = order.get("shipping_address", {}).get("phone", "").replace("+2", "").replace(" ", "")
+    address1 = order.get("shipping_address", {}).get("address1", "")
+
+    msg = f""" Damanhour 007{order_number}
+📞 Whatsapp number = {phone}
+📱 Phone number = {phone1}
+📍 العنوان:
+{address1}
+"""
+
+    
+    return msg
+
+def messs(order):
+    order_number = order.get("order_number")
+
+    addr = order.get("shipping_address") or {}
+    phone = addr.get("zip", "")
+    phone1 = order.get("shipping_address", {}).get("phone", "").replace("+2", "").replace(" ", "")
+    address1 = order.get("shipping_address", {}).get("address1", "")
+
+    msg = f""" order number 007{order_number} has been paid
+📞 Whatsapp number = {phone}
+📱 Phone number = {phone1}
+"""
+
+def messag(order):
+    order_number = order.get("order_number")
+
+    addr = order.get("shipping_address") or {}
+    phone = addr.get("zip", "")
+    phone1 = order.get("shipping_address", {}).get("phone", "").replace("+2", "").replace(" ", "")
+    address1 = order.get("shipping_address", {}).get("address1", "")
+
+    msg = f""" Alex 007{order_number}
+📞 Whatsapp number = {phone}
+📱 Phone number = {phone1}
+📍 العنوان:
+{address1}
+"""
+
+    
+    return msg
 
 def format_order_messag(order):
     order_number = order.get("order_number")
@@ -175,15 +236,23 @@ async def handle_order(request: Request):
 
     else:
         message = format_order_messag(data)
+        mes=messag(data)
+        mes1=messa(data)
+
 
         province = (
             data.get("shipping_address", {}).get("province_code", "") or
             data.get("billing_address", {}).get("province_code", "")
         ).lower()
+        non=data.get("shipping_address", {}).get("city", "")
+
 
 
         if "alx" in province:
-            send_telegram(ALEX_BOT_TOKEN, ALEX_CHAT_ID, message)
+            send_telegram(ALEX_BOT_TOKEN, ALEX_CHAT_ID, mes)
+        elif "Damanhour" in non or "damanhour" in non or "Damanhoor" in non or "damanhoor" in non:
+            send_telegram(ALEX_BOT_TOKEN, ALEX_CHAT_ID, mes1)
+        
         else:
             send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
 
@@ -220,19 +289,27 @@ async def edit_order(request: Request):
 
     else:
         message = format_order_messag(data)
+        mes=messag(data)
+        mes1=messa(data)
 
         province = (
             data.get("shipping_address", {}).get("province_code", "") or
             data.get("billing_address", {}).get("province_code", "")
         ).lower()
+        non=data.get("shipping_address", {}).get("city", "")
+
 
 
         if "alx" in province:
-            send_telegram(ALEX_BOT_TOKEN, ALEX_CHAT_ID, message)
+            send_telegram(ALEX_BOT_TOKEN, ALEX_CHAT_ID, mes)
+        elif "Damanhour" in non or "damanhour" in non or "Damanhoor" in non or "damanhoor" in non:
+            send_telegram(ALEX_BOT_TOKEN, ALEX_CHAT_ID, mes1)
+        
         else:
             send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
 
         return {"status": "sent"}
+
 
     
 
@@ -324,190 +401,191 @@ def handle_bosta_webhook(request: Request):
 last_tracking_number = None
 last_order_name = None
 
-BOSTA_TOKEN = os.getenv("BOSTA_TOKEN")
-BOSTA_URL = os.getenv("BOSTA_URL")
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-OTHER_CHAT_ID = os.getenv("OTHER_CHAT_ID")
-
-SHOP_NAME     = os.getenv("SHOP_NAME")
-API_VERSION   = os.getenv("API_VERSION")
-ACCESS_TOKEN  = os.getenv("ACCESS_TOKEN")
 
 
 def fetch_product_images(line_items):
-
     image_map = {}
     for li in line_items:
         pid = li.get("product_id")
         if pid and pid not in image_map:
-            url = f"https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}/products/{pid}.json?fields=image"
-            r = requests.get(url, headers={"X-Shopify-Access-Token": ACCESS_TOKEN})
-            r.raise_for_status()
-            prod = r.json().get("product", {})
-            img = prod.get("image", {}).get("src", "")
-            image_map[pid] = img
+            try:
+                url = f"https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}/products/{pid}.json?fields=image"
+                r = requests.get(url, headers={"X-Shopify-Access-Token": ACCESS_TOKEN})
+                r.raise_for_status()
+                img_url = r.json().get("product", {}).get("image", {}).get("src", "")
+
+                if img_url and requests.head(img_url, timeout=3).status_code == 200:
+                    image_map[pid] = img_url
+                else:
+                    image_map[pid] = ""
+            except Exception as e:
+                logging.warning(f"Failed to load product image {pid}: {e}")
+                image_map[pid] = ""
     return image_map
 
 def send_invoice_to_telegram(order: dict, image_map: dict):
-    subtotal        = float(order.get("current_subtotal_price", 0))
-    total_discounts = float(order.get("current_total_discounts", 0))
-    true_subtotal   = subtotal + total_discounts
-    shipping_price  = 0
-    shipping_lines  = order.get("shipping_lines", [])
-    if shipping_lines:
-        shipping_price = float(shipping_lines[0].get("price", 0))
-    total_price     = float(order.get("current_total_price", 0))
+    try:
+        subtotal        = float(order.get("current_subtotal_price", 0))
+        total_discounts = float(order.get("current_total_discounts", 0))
+        true_subtotal   = subtotal + total_discounts
+        shipping_price  = 0
+        shipping_lines  = order.get("shipping_lines", [])
+        if shipping_lines:
+            shipping_price = float(shipping_lines[0].get("price", 0))
+        total_price     = float(order.get("current_total_price", 0))
 
-    paid_amount = total_price if order.get("financial_status", "").lower() == "paid" else 0
-    outstanding = total_price - paid_amount
+        paid_amount = total_price if order.get("financial_status", "").lower() == "paid" else 0
+        outstanding = total_price - paid_amount
 
-    note = order.get("note", "")
-    ship_addr = order.get("shipping_address", {})
+        note = order.get("note", "")
+        ship_addr = order.get("shipping_address", {})
 
-    html = f"""
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <style>
-        @font-face {{
-            font-family: 'Cairo';
-            src: url('fonts/Cairo-Regular.ttf') format('truetype');
-            font-weight: normal;
-        }}
-        @font-face {{
-            font-family: 'Cairo';
-            src: url('fonts/Cairo-Bold.ttf') format('truetype');
-            font-weight: bold;
-        }}
-        body {{
-            font-family: 'Cairo', sans-serif;
-            margin: 0;
-            padding: 0;
-            font-size: 12px;
-            line-height: 1.4;
-        }}
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 0.8em;
-        }}
-        th, td {{
-            padding: 4px;
-            border: 1px solid #ddd;
-        }}
-        h3 {{
-            margin: 0.6em 0 0.4em;
-        }}
-        p {{
-            margin: 0.4em 0;
-        }}
-        strong {{
-            font-weight: bold;
-        }}
-      </style>
-    </head>
-    <body>
-      <p style="text-align: right; margin: 0; font-size: 1.3em;"><strong>{order['name']}</strong></p>
-      <div style="margin: 0.5em 0;">
-        <img src="https://i.ibb.co/dMZ03Zc/2d96914c-cac1-40a7-b8b8-bd3286ad39fa.png"
-             alt="checkout-logo" style="max-height: 80px;" />
-      </div>
-      <hr />
-      <h3>Item Details</h3>
-      <table>
-        <thead>
-          <tr style="background-color: #f5f5f5;">
-            <th>Product</th>
-            <th>Quantity</th>
-            <th>Item</th>
-            <th>Price</th>
-          </tr>
-        </thead>
-        <tbody>
-    """
-
-    for li in order.get("line_items", []):
-        qty   = li.get("current_quantity", 0)
-        if qty <= 0: continue
-        title = li.get("title", "")
-        price = float(li.get("price", 0))
-        img   = image_map.get(li.get("product_id"), "")
-
-        html += f"""
-        <tr>
-          <td><img src="{img}" style="max-width: 50px;" /></td>
-          <td style="text-align: center;"><strong>{qty}</strong></td>
-          <td>
-            <strong>{title}</strong>
-            {"<br/><small>" + li.get("variant_title", "") + "</small>" if li.get("variant_title") else ""}
-          </td>
-          <td>{price:.2f} EGP</td>
-        </tr>
+        html = f"""
+        <html>
+        <head>
+        <meta charset="UTF-8">
+        <style>
+            @font-face {{
+                font-family: 'Cairo';
+                src: url('fonts/Cairo-Regular.ttf') format('truetype');
+                font-weight: normal;
+            }}
+            @font-face {{
+                font-family: 'Cairo';
+                src: url('fonts/Cairo-Bold.ttf') format('truetype');
+                font-weight: bold;
+            }}
+            body {{
+                font-family: 'Cairo', sans-serif;
+                margin: 0;
+                padding: 0;
+                font-size: 12px;
+                line-height: 1.4;
+            }}
+            table {{
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 0.8em;
+            }}
+            th, td {{
+                padding: 4px;
+                border: 1px solid #ddd;
+            }}
+            h3 {{
+                margin: 0.6em 0 0.4em;
+            }}
+            p {{
+                margin: 0.4em 0;
+            }}
+            strong {{
+                font-weight: bold;
+            }}
+        </style>
+        </head>
+        <body>
+        <p style="text-align: right; margin: 0; font-size: 1.3em;"><strong>{order['name']}</strong></p>
+        <div style="margin: 0.5em 0;">
+            <img src="https://i.ibb.co/dMZ03Zc/2d96914c-cac1-40a7-b8b8-bd3286ad39fa.png"
+                alt="checkout-logo" style="max-height: 80px;" />
+        </div>
+        <hr />
+        <h3>Item Details</h3>
+        <table>
+            <thead>
+            <tr style="background-color: #f5f5f5;">
+                <th>Product</th>
+                <th>Quantity</th>
+                <th>Item</th>
+                <th>Price</th>
+            </tr>
+            </thead>
+            <tbody>
         """
 
-    html += f"""
-        </tbody>
-      </table>
-      <h3>Payment Summary</h3>
-      <table>
-        <tr><td>Subtotal:</td><td>{true_subtotal:.2f} EGP</td></tr>
-        <tr><td>Discount:</td><td>{total_discounts:.2f} EGP</td></tr>
-        <tr><td>Shipping:</td><td>{shipping_price:.2f} EGP</td></tr>
-        <tr><td><strong>Total:</strong></td><td><strong>{total_price:.2f} EGP</strong></td></tr>
-    """
+        for li in order.get("line_items", []):
+            qty   = li.get("current_quantity", 0)
+            if qty <= 0: continue
+            title = li.get("title", "")
+            price = float(li.get("price", 0))
+            img   = image_map.get(li.get("product_id"), "")
 
-    if paid_amount > 0:
+            html += f"""
+            <tr>
+            <td><img src="{img}" style="max-width: 50px;" /></td>
+            <td style="text-align: center;"><strong>{qty}</strong></td>
+            <td>
+                <strong>{title}</strong>
+                {"<br/><small>" + li.get("variant_title", "") + "</small>" if li.get("variant_title") else ""}
+            </td>
+            <td>{price:.2f} EGP</td>
+            </tr>
+            """
+
         html += f"""
-        <tr><td><strong>Paid amount:</strong></td><td><strong>{paid_amount:.2f} EGP</strong></td></tr>"""
+            </tbody>
+        </table>
+        <h3>Payment Summary</h3>
+        <table>
+            <tr><td>Subtotal:</td><td>{true_subtotal:.2f} EGP</td></tr>
+            <tr><td>Discount:</td><td>{total_discounts:.2f} EGP</td></tr>
+            <tr><td>Shipping:</td><td>{shipping_price:.2f} EGP</td></tr>
+            <tr><td><strong>Total:</strong></td><td><strong>{total_price:.2f} EGP</strong></td></tr>
+        """
 
-    if outstanding > 0:
-        html += f"""
-        <tr><td><strong>Outstanding:</strong></td><td><strong>{outstanding:.2f} EGP</strong></td></tr>"""
+        if paid_amount > 0:
+            html += f"""
+            <tr><td><strong>Paid amount:</strong></td><td><strong>{paid_amount:.2f} EGP</strong></td></tr>"""
 
-    html += "</table>"
+        if outstanding > 0:
+            html += f"""
+            <tr><td><strong>Outstanding:</strong></td><td><strong>{outstanding:.2f} EGP</strong></td></tr>"""
 
-    if note:
-        html += f"""
-      <h3>Note</h3>
-      <div style="font-size:1.1em;">{note}</div>"""
+        html += "</table>"
 
-    if ship_addr:
-        html += f"""
-      <h3>Shipping Details</h3>
-      <div style="border:1px solid #000; padding:0.6em; font-size:1.1em; margin-bottom:0.8em; line-height:1.4;">
-        <strong>{ship_addr.get('name')}</strong><br/>
-        {ship_addr.get('address1')}<br/>
-        {ship_addr.get('city')} {ship_addr.get('province_code')} {ship_addr.get('zip') or ''}<br/>
-        {ship_addr.get('phone')}<br/>
-        {ship_addr.get('country')}
-      </div>"""
+        if note:
+            html += f"""
+        <h3>Note</h3>
+        <div style="font-size:1.1em;">{note}</div>"""
 
-    html += """
-      <p style="margin-top: 1.2em;">
-        For questions, contact us via WhatsApp <u><strong>+20 120 123 8905</strong></u><br/>
-        Instagram: <strong>Koreanbeautysonlineshop</strong>
-      </p>
-    </body></html>
-    """
+        if ship_addr:
+            html += f"""
+        <h3>Shipping Details</h3>
+        <div style="border:1px solid #000; padding:0.6em; font-size:1.1em; margin-bottom:0.8em; line-height:1.4;">
+            <strong>{ship_addr.get('name')}</strong><br/>
+            {ship_addr.get('address1')}<br/>
+            {ship_addr.get('city')} {ship_addr.get('province_code')} {ship_addr.get('zip') or ''}<br/>
+            {ship_addr.get('phone')}<br/>
+            {ship_addr.get('country')}
+        </div>"""
 
-    html_file = f"{order['name']}.html"
-    pdf_file  = f"{order['name']}.pdf"
+        html += """
+        <p style="margin-top: 1.2em;">
+            For questions, contact us via WhatsApp <u><strong>+20 120 123 8905</strong></u><br/>
+            Instagram: <strong>Koreanbeautysonlineshop</strong>
+        </p>
+        </body></html>
+        """
 
-    with open(html_file, "w", encoding="utf-8") as f:
-        f.write(html)
+        html_file = f"{order['name']}.html"
+        pdf_file  = f"{order['name']}.pdf"
 
-    HTML(html_file, base_url=".").write_pdf(pdf_file)
+        with open(html_file, "w", encoding="utf-8") as f:
+            f.write(html)
 
-    tg_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
-    with open(pdf_file, "rb") as f:
-        requests.post(tg_url, data={
-            "chat_id": OTHER_CHAT_ID,
-            "caption": f"📄 Invoice for {order['name']}"
-        }, files={"document": (pdf_file, f, "application/pdf")})
+        HTML(html_file, base_url=".").write_pdf(pdf_file)
 
-    os.remove(html_file)
-    os.remove(pdf_file)
+        tg_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
+        with open(pdf_file, "rb") as f:
+            requests.post(tg_url, data={
+                "chat_id": OTHER_CHAT_ID,
+                "caption": f"📄 Invoice for {order['name']}"
+            }, files={"document": (pdf_file, f, "application/pdf")})
+
+        os.remove(html_file)
+        os.remove(pdf_file)
+    except Exception as e:
+        logging.error(f"Failed to send invoice: {e}")
 
 
 
@@ -517,42 +595,91 @@ seen_trackings = TTLCache(maxsize=100, ttl=6000)
 
 @app.post("/tracking")
 async def save_and_send_tracking(request: Request):
-    data = await request.json()
+    try:
+        data = await request.json()
+        tracking = data.get("tracking_number", "")
+        order_name = data.get("name", "").replace(".1", "")
+        if tracking in seen_trackings:
+            return {"status": "duplicate_tracking_skipped"}
 
-    tracking   = data.get("tracking_number", "")
-    order_name = data.get("name", "").replace(".1", "")
+        seen_trackings[tracking] = True
 
-    if tracking in seen_trackings:
-        return {"status": "duplicate_tracking_skipped"}
+        attempts = 3
+        for i in range(attempts):
+            try:
+                res = requests.post(
+                    BOSTA_URL,
+                    json={"trackingNumbers": tracking, "requestedAwbType": "A6", "lang": "en"},
+                    headers={"Authorization": BOSTA_TOKEN},
+                    timeout=5
+                )
+                res.raise_for_status()
+                break
+            except requests.exceptions.ReadTimeout:
+                logging.warning(f"Timeout from Bosta - attempt {i+1}")
+                time.sleep(1)
+        else:
+            raise Exception("AWB request failed after several attempts")
+
+        awb_b64 = res.json().get("data", "")
+        if awb_b64:
+            awb_pdf = base64.b64decode(awb_b64)
+            tg_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
+            requests.post(tg_url, data={
+                "chat_id": OTHER_CHAT_ID,
+                "caption": f"📄 AirwayBill for {order_name}"
+            }, files={"document": (f"ب {order_name}.pdf", awb_pdf, "application/pdf")})
+
+        order_id = data.get("order_id")
+        shop_url = f"https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}/orders/{order_id}.json"
+        shop_resp = requests.get(shop_url, headers={"X-Shopify-Access-Token": ACCESS_TOKEN})
+        shop_resp.raise_for_status()
+        order = shop_resp.json().get("order", {})
+        image_map = fetch_product_images(order.get("line_items", []))
+        send_invoice_to_telegram(order, image_map)
+
+        return {"status": "awb_sent_and_invoice_sent"}
+
+    except Exception as e:
+        logging.error(f"Error during /tracking execution: {e}")
+        return {"status": "error", "message": str(e)}
+    
 
 
-    seen_trackings[tracking] = True
 
-    res = requests.post(
-        BOSTA_URL,
-        json={"trackingNumbers": tracking, "requestedAwbType": "A6", "lang": "en"},
-        headers={"Authorization": BOSTA_TOKEN}
-    )
-    res.raise_for_status()
-    awb_b64 = res.json().get("data", "")
-    if awb_b64:
-        awb_pdf = base64.b64decode(awb_b64)
-        tg_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
-        requests.post(tg_url, data={
-            "chat_id": OTHER_CHAT_ID,
-            "caption": f"📄 AirwayBill for {order_name}"
-        }, files={"document": (f"ب {order_name}.pdf", awb_pdf, "application/pdf")})
+@app.post("/payment")
+async def handle_payment(request: Request):
+    try:
+        data = await request.json()
 
-    order_id = data.get("order_id")
-    shop_url = f"https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}/orders/{order_id}.json"
-    shop_resp = requests.get(
-        shop_url,
-        headers={"X-Shopify-Access-Token": ACCESS_TOKEN}
-    )
-    shop_resp.raise_for_status()
-    order = shop_resp.json().get("order", {})
+        gateways = data.get("payment_gateway_names", [])
+        message = messs(data)
 
-    image_map = fetch_product_images(order.get("line_items", []))
-    send_invoice_to_telegram(order, image_map)
+        if "Cash on Delivery (COD)" in gateways:
+            province = (
+                data.get("shipping_address", {}).get("province_code", "") or
+                data.get("billing_address", {}).get("province_code", "")
+            ).lower()
+            non=data.get("shipping_address", {}).get("city", "")
 
-    return {"status": "awb_sent_and_invoice_sent"}
+
+
+            if "alx" in province:
+                send_telegram(ALEX_BOT_TOKEN, ALEX_CHAT_ID, message)
+            elif "Damanhour" in non or "damanhour" in non or "Damanhoor" in non or "damanhoor" in non:
+                send_telegram(ALEX_BOT_TOKEN, ALEX_CHAT_ID, message)
+            
+            else:
+                send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
+
+        elif "Instapay" in gateways:
+            send_telegram(PRE_BOT_TOKEN, PRE_CHAT_ID, message)
+            return {"status": "sent to instapay bot"}
+
+
+        return {"status": "success"}
+
+    except Exception as e:
+        logging.error(f"Error in /payment: {e}")
+        return {"status": "error", "message": str(e)}
+
