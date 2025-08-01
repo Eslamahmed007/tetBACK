@@ -148,6 +148,8 @@ def messs(order):
 📞 Whatsapp number = {phone}
 📱 Phone number = {phone1}
 """
+    return msg
+
 
 def messag(order):
     order_number = order.get("order_number")
