@@ -1,7 +1,11 @@
+import logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
 from fastapi import FastAPI, Request , Query
 import base64
 import datetime
-import logging
 from fastapi.responses import FileResponse
 import os, requests
 from weasyprint import HTML , CSS
@@ -252,7 +256,7 @@ async def handle_order(request: Request):
 
         if "alx" in province:
             send_telegram(ALEX_BOT_TOKEN, ALEX_CHAT_ID, mes)
-        elif "Damanhour" in non or "damanhour" in non or "Damanhoor" in non or "damanhoor" in non:
+        elif "Damanhour" in non or "damanhour" in non or "Damanhoor" in non or "damanhoor" in non or "دمنهور" in non:
             send_telegram(ALEX_BOT_TOKEN, ALEX_CHAT_ID, mes1)
         
         else:
@@ -304,7 +308,7 @@ async def edit_order(request: Request):
 
         if "alx" in province:
             send_telegram(ALEX_BOT_TOKEN, ALEX_CHAT_ID, mes)
-        elif "Damanhour" in non or "damanhour" in non or "Damanhoor" in non or "damanhoor" in non:
+        elif "Damanhour" in non or "damanhour" in non or "Damanhoor" in non or "damanhoor" in non or "دمنهور" in non:
             send_telegram(ALEX_BOT_TOKEN, ALEX_CHAT_ID, mes1)
         
         else:
@@ -668,7 +672,7 @@ async def handle_payment(request: Request):
 
             if "alx" in province:
                 send_telegram(ALEX_BOT_TOKEN, ALEX_CHAT_ID, message)
-            elif "Damanhour" in non or "damanhour" in non or "Damanhoor" in non or "damanhoor" in non:
+            elif "Damanhour" in non or "damanhour" in non or "Damanhoor" in non or "damanhoor" in non or "دمنهور" in non:
                 send_telegram(ALEX_BOT_TOKEN, ALEX_CHAT_ID, message)
             
             else:
@@ -684,4 +688,3 @@ async def handle_payment(request: Request):
     except Exception as e:
         logging.error(f"Error in /payment: {e}")
         return {"status": "error", "message": str(e)}
-
