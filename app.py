@@ -1,11 +1,19 @@
 import logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
-logging.getLogger("fontTools").setLevel(logging.WARNING)
-logging.getLogger("weasyprint").setLevel(logging.WARNING)
-logging.getLogger("PIL").setLevel(logging.WARNING) 
+import sys
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.INFO)
+
+formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+handler.setFormatter(formatter)
+
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+root_logger.handlers = [handler]
+
+noisy_libs = ["fontTools", "weasyprint", "PIL"]
+for lib in noisy_libs:
+    logging.getLogger(lib).setLevel(logging.WARNING)
+
 from fastapi import FastAPI, Request , Query
 import base64
 import datetime
