@@ -3,6 +3,9 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
+logging.getLogger("fontTools").setLevel(logging.WARNING)
+logging.getLogger("weasyprint").setLevel(logging.WARNING)
+logging.getLogger("PIL").setLevel(logging.WARNING) 
 from fastapi import FastAPI, Request , Query
 import base64
 import datetime
