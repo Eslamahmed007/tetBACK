@@ -538,6 +538,24 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
             <td>{price:.2f} EGP</td>
             </tr>
             """
+        if shipping_lines:
+            shipping_line = shipping_lines[0]
+            shipping_title = shipping_line.get("title", "Shipping")
+            raw_price = float(shipping_line.get("price", 0))
+            discounted_price = float(shipping_line.get("discounted_price", raw_price))
+
+            if discounted_price < raw_price:
+                price_display = f"<del>{raw_price:.2f} EGP</del><br/><strong>{discounted_price:.2f} EGP</strong>"
+            else:
+                price_display = f"{raw_price:.2f} EGP"
+
+            html += f"""
+            <tr style="background-color: #f9f9f9;">
+                <td colspan="2" style="font-weight: bold;">Shipping Method</td>
+                <td style="font-weight: bold;">{shipping_title}</td>
+                <td>{price_display}</td>
+            </tr>
+            """
 
         html += f"""
             </tbody>
