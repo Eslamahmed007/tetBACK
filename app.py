@@ -89,6 +89,8 @@ def formatt_order_messag(order):
     for item in line_items:
         if item['title'] =="Cash on Delivery fee" or item['title'] =='Normal Package' or item['title'] =='Premium Package':
             continue
+        elif (item['current_quantity']==0):
+            continue
         else:
             products += f"- {item['title']} (x{item['current_quantity']})\n"
 
@@ -198,6 +200,8 @@ def format_order_messag(order):
     products = ""
     for item in line_items:
         if item['title'] =="Cash on Delivery fee" or item['title'] =='Normal Package' or item['title'] =='Premium Package':
+            continue
+        elif (item['current_quantity']==0):
             continue
         else:
             products += f"- {item['title']} (x{item['current_quantity']})\n"
@@ -328,11 +332,17 @@ async def edit_order(request: Request):
         return {"status": "sent"}
 
 
-    
+
+seen_ord = TTLCache(maxsize=100, ttl=6000)
 
 @app.post("/cancel")
 async def cancel_order(request: Request):
     data = await request.json()
+    order_id = data.get("order_id")
+    if order_id in seen_ord:
+        return {"status": "duplicate_tracking_skipped"}
+
+    seen_ord[order_id] = True
     paid = data.get("financial_status", "")
     
     if paid=="Paid" or paid=="paid":
@@ -680,13 +690,17 @@ async def save_and_send_tracking(request: Request):
         return {"status": "error", "message": str(e)}
     
 
-
+seen_paid = TTLCache(maxsize=100, ttl=6000)
 
 @app.post("/payment")
 async def handle_payment(request: Request):
     try:
         data = await request.json()
+        order_id = data.get("order_id")
+        if order_id in seen_paid:
+            return {"status": "duplicate_tracking_skipped"}
 
+        seen_paid[order_id] = True
         gateways = data.get("payment_gateway_names", [])
         message = messs(data)
 
