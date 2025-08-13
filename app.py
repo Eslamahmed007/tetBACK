@@ -135,23 +135,6 @@ Hi {name}
     
     return msg1
 
-def messa(order):
-    order_number = order.get("order_number")
-
-    addr = order.get("shipping_address") or {}
-    phone = addr.get("zip", "")
-    phone1 = order.get("shipping_address", {}).get("phone", "").replace("+2", "").replace(" ", "")
-    address1 = order.get("shipping_address", {}).get("address1", "")
-
-    msg = f""" Damanhour 007{order_number}
-📞 Whatsapp number = {phone}
-📱 Phone number = {phone1}
-📍 العنوان:
-{address1}
-"""
-
-    
-    return msg
 
 def messs(order):
     order_number = order.get("order_number")
@@ -167,24 +150,6 @@ def messs(order):
 """
     return msg
 
-
-def messag(order):
-    order_number = order.get("order_number")
-
-    addr = order.get("shipping_address") or {}
-    phone = addr.get("zip", "")
-    phone1 = order.get("shipping_address", {}).get("phone", "").replace("+2", "").replace(" ", "")
-    address1 = order.get("shipping_address", {}).get("address1", "")
-
-    msg = f""" Alex 007{order_number}
-📞 Whatsapp number = {phone}
-📱 Phone number = {phone1}
-📍 العنوان:
-{address1}
-"""
-
-    
-    return msg
 
 def format_order_messag(order):
     order_number = order.get("order_number")
@@ -257,25 +222,7 @@ async def handle_order(request: Request):
 
     else:
         message = format_order_messag(data)
-        mes=messag(data)
-        mes1=messa(data)
-
-
-        province = (
-            data.get("shipping_address", {}).get("province_code", "") or
-            data.get("billing_address", {}).get("province_code", "")
-        ).lower()
-        non=data.get("shipping_address", {}).get("city", "")
-
-
-
-        if "alx" in province:
-            send_telegram(ALEX_BOT_TOKEN, ALEX_CHAT_ID, mes)
-        elif "Damanhour" in non or "damanhour" in non or "Damanhoor" in non or "damanhoor" in non or "دمنهور" in non:
-            send_telegram(ALEX_BOT_TOKEN, ALEX_CHAT_ID, mes1)
-        
-        else:
-            send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
+        send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
 
         return {"status": "sent"}
 
@@ -310,24 +257,7 @@ async def edit_order(request: Request):
 
     else:
         message = format_order_messag(data)
-        mes=messag(data)
-        mes1=messa(data)
-
-        province = (
-            data.get("shipping_address", {}).get("province_code", "") or
-            data.get("billing_address", {}).get("province_code", "")
-        ).lower()
-        non=data.get("shipping_address", {}).get("city", "")
-
-
-
-        if "alx" in province:
-            send_telegram(ALEX_BOT_TOKEN, ALEX_CHAT_ID, mes)
-        elif "Damanhour" in non or "damanhour" in non or "Damanhoor" in non or "damanhoor" in non or "دمنهور" in non:
-            send_telegram(ALEX_BOT_TOKEN, ALEX_CHAT_ID, mes1)
-        
-        else:
-            send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
+        send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
 
         return {"status": "sent"}
 
@@ -357,17 +287,7 @@ async def cancel_order(request: Request):
 
     else:
         message = cancell(data)
-
-        province = (
-            data.get("shipping_address", {}).get("province_code", "") or
-            data.get("billing_address", {}).get("province_code", "")
-        ).lower()
-
-
-        if "alx" in province:
-            send_telegram(ALEX_BOT_TOKEN, ALEX_CHAT_ID, message)
-        else:
-            send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
+        send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
 
         return {"status": "sent"}
 
@@ -711,15 +631,7 @@ async def handle_payment(request: Request):
             ).lower()
             non=data.get("shipping_address", {}).get("city", "")
 
-
-
-            if "alx" in province:
-                send_telegram(ALEX_BOT_TOKEN, ALEX_CHAT_ID, message)
-            elif "Damanhour" in non or "damanhour" in non or "Damanhoor" in non or "damanhoor" in non or "دمنهور" in non:
-                send_telegram(ALEX_BOT_TOKEN, ALEX_CHAT_ID, message)
-            
-            else:
-                send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
+            send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
 
         elif "Instapay" in gateways:
             send_telegram(PRE_BOT_TOKEN, PRE_CHAT_ID, message)
