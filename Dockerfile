@@ -18,13 +18,9 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
-COPY requirements.txt .
-RUN pip install --upgrade pip && pip install -r requirements.txt
-
 COPY . .
-COPY Cairo-Regular.ttf /usr/share/fonts/truetype/
-COPY Cairo-Bold.ttf /usr/share/fonts/truetype/
-RUN fc-cache -fv
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+RUN pip install --upgrade pip
+RUN pip install -r requirements.txt
+
+CMD uvicorn app:app --host 0.0.0.0 --port ${PORT}
