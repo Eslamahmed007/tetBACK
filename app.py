@@ -226,7 +226,7 @@ async def handle_order(request: Request):
 
         return {"status": "sent"}
 
-seen_edit = TTLCache(maxsize=200, ttl=45600)
+seen_edit = TTLCache(maxsize=1000, ttl=86400)
 
 @app.post("/edit")
 async def edit_order(request: Request):
@@ -263,7 +263,7 @@ async def edit_order(request: Request):
 
 
 
-seen_ord = TTLCache(maxsize=200, ttl=45600)
+seen_ord = TTLCache(maxsize=1000, ttl=86400)
 
 @app.post("/cancel")
 async def cancel_order(request: Request):
@@ -556,7 +556,7 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
 
 
 
-seen_trackings = TTLCache(maxsize=1000, ttl=45600)
+seen_trackings = TTLCache(maxsize=1000, ttl=86400)
 
 @app.post("/tracking")
 async def save_and_send_tracking(request: Request):
@@ -610,7 +610,7 @@ async def save_and_send_tracking(request: Request):
         return {"status": "error", "message": str(e)}
     
 
-seen_paid = TTLCache(maxsize=200, ttl=45600)
+seen_paid = TTLCache(maxsize=1000, ttl=86400)
 
 @app.post("/payment")
 async def handle_payment(request: Request):
@@ -643,4 +643,5 @@ async def handle_payment(request: Request):
     except Exception as e:
         logging.error(f"Error in /payment: {e}")
         return {"status": "error", "message": str(e)}
+
 
