@@ -14,7 +14,7 @@ noisy_libs = ["fontTools", "weasyprint", "PIL"]
 for lib in noisy_libs:
     logging.getLogger(lib).setLevel(logging.WARNING)
 
-from fastapi import FastAPI, Request , Query
+from fastapi import FastAPI, Request , Query , HTTPException
 import base64
 import datetime
 from fastapi.responses import FileResponse
@@ -622,5 +622,58 @@ async def handle_payment(request: Request):
         return {"status": "error", "message": str(e)}
 
 
+@app.get("/discount")
+def get_discount(code: str = Query(..., description="Discount code to lookup")):
+    try:
+
+        BASE_URL = f"https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}"
+        HEADERS = {
+            "Content-Type": "application/json",
+            "X-Shopify-Access-Token": ACCESS_TOKEN
+        }
+
+        # Step 1: Lookup discount code
+        lookup_url = f"{BASE_URL}/discount_codes/lookup.json?code={code}"
+        lookup_res = requests.get(lookup_url, headers=HEADERS)
+
+        if lookup_res.status_code != 200:
+            raise HTTPException(status_code=lookup_res.status_code, detail="Error fetching discount code")
+
+        discount_data = lookup_res.json().get("discount_code")
+        if not discount_data:
+            raise HTTPException(status_code=404, detail="Discount code not found")
+
+        price_rule_id = discount_data.get("price_rule_id")
+
+        # Step 2: Get price rule details
+        price_rule_url = f"{BASE_URL}/price_rules/{price_rule_id}.json"
+        price_rule_res = requests.get(price_rule_url, headers=HEADERS)
+
+        if price_rule_res.status_code != 200:
+            raise HTTPException(status_code=price_rule_res.status_code, detail="Error fetching price rule")
+
+        price_rule_data = price_rule_res.json().get("price_rule")
+
+        # Extract simplified response
+        value_type = price_rule_data.get("value_type")  # percentage or fixed_amount
+        raw_value = price_rule_data.get("value")       # negative value
+        formatted_value = ""
+
+        if value_type == "percentage":
+            formatted_value = f"{abs(float(raw_value))}%"
+        elif value_type == "fixed_amount":
+            formatted_value = f"{abs(float(raw_value))} {price_rule_data.get('currency', 'USD')}"
+        else:
+            formatted_value = str(raw_value)
+
+        # Final simplified response
+        return {
+            "code": discount_data.get("code"),
+            "type": value_type,
+            "value": formatted_value
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
