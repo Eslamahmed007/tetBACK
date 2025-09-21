@@ -662,7 +662,7 @@ def get_discount(code: str = Query(..., description="Discount code to lookup")):
         if value_type == "percentage":
             formatted_value = f"{abs(float(raw_value))}%"
         elif value_type == "fixed_amount":
-            formatted_value = f"{abs(float(raw_value))} {price_rule_data.get('currency', 'USD')}"
+            formatted_value = f"{abs(float(raw_value))} {price_rule_data.get('currency', 'LE')}"
         else:
             formatted_value = str(raw_value)
 
@@ -675,5 +675,6 @@ def get_discount(code: str = Query(..., description="Discount code to lookup")):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
