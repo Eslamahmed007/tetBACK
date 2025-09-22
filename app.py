@@ -17,7 +17,7 @@ for lib in noisy_libs:
 from fastapi import FastAPI, Request , Query , HTTPException
 import base64
 import datetime
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse , JSONResponse
 import os, requests
 from weasyprint import HTML , CSS
 from cachetools import TTLCache
@@ -50,6 +50,9 @@ OTHER_CHAT_ID = os.getenv("OTHER_CHAT_ID")
 SHOP_NAME     = os.getenv("SHOP_NAME")
 API_VERSION   = os.getenv("API_VERSION")
 ACCESS_TOKEN  = os.getenv("ACCESS_TOKEN")
+
+SHOPIFY_STORE_ID = os.getenv("SHOPIFY_STORE_ID")
+SHOPIFY_CUSTOMER_ACCOUNT_API_URL = os.getenv("SHOPIFY_CUSTOMER_ACCOUNT_API_URL")
 
 def send_telegram(token, chat_id, message):
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -677,33 +680,38 @@ def get_discount(code: str = Query(..., description="Discount code to lookup")):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-
 @app.post("/customer/graphql")
 async def customer_graphql_proxy(request: Request):
     """
-    Proxy endpoint for Shopify Customer Account API GraphQL queries
+    بروكسي لاستعلامات Customer Account API
     """
     try:
-        # Get the access token from Authorization header
+        # جلب التوكن من الهيدر
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+            return JSONResponse(
+                status_code=401, 
+                content={"errors": [{"message": "Missing or invalid Authorization header"}]}
+            )
         
         customer_access_token = auth_header.replace("Bearer ", "").strip()
         
-        # Get the GraphQL query from request body
+        # جلب الاستعلام من البودي
         body = await request.json()
         query = body.get("query", "")
         variables = body.get("variables", {})
         
         if not query:
-            raise HTTPException(status_code=400, detail="Missing GraphQL query")
+            return JSONResponse(
+                status_code=400, 
+                content={"errors": [{"message": "Missing GraphQL query"}]}
+            )
         
-        # Prepare the request to Shopify Customer Account API
+        # إعداد الطلب لشوبيفاي
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {customer_access_token}",
-            "X-Shopify-Store-Id": os.getenv("SHOPIFY_STORE_ID", "54938435697")
+            "X-Shopify-Store-Id": SHOPIFY_STORE_ID
         }
         
         payload = {
@@ -711,19 +719,27 @@ async def customer_graphql_proxy(request: Request):
             "variables": variables
         }
         
-        # Make the request to Shopify
-        api_url = os.getenv("SHOPIFY_CUSTOMER_ACCOUNT_API_URL", "https://shopify.com/customer-account/api/graphql")
-        response = requests.post(api_url, json=payload, headers=headers, timeout=30)
+        # الإرسال لشوبيفاي
+        response = requests.post(SHOPIFY_CUSTOMER_ACCOUNT_API_URL, json=payload, headers=headers, timeout=30)
         
         if response.status_code != 200:
             logging.error(f"Shopify API error: {response.status_code} - {response.text}")
-            raise HTTPException(status_code=response.status_code, detail="Shopify API error")
+            return JSONResponse(
+                status_code=response.status_code,
+                content={"errors": [{"message": "Shopify API error"}]}
+            )
         
         return response.json()
         
     except requests.exceptions.RequestException as e:
         logging.error(f"Request error: {e}")
-        raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"errors": [{"message": f"Proxy error: {str(e)}"}]}
+        )
     except Exception as e:
         logging.error(f"Unexpected error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return JSONResponse(
+            status_code=500,
+            content={"errors": [{"message": str(e)}]}
+        )
