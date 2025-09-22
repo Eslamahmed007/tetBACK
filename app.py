@@ -22,7 +22,7 @@ import os, requests
 from weasyprint import HTML , CSS
 from cachetools import TTLCache
 import time
-
+from fastapi import HTTPException
 
 app = FastAPI()
 
@@ -678,3 +678,52 @@ def get_discount(code: str = Query(..., description="Discount code to lookup")):
 
 
 
+@app.post("/customer/graphql")
+async def customer_graphql_proxy(request: Request):
+    """
+    Proxy endpoint for Shopify Customer Account API GraphQL queries
+    """
+    try:
+        # Get the access token from Authorization header
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+        
+        customer_access_token = auth_header.replace("Bearer ", "").strip()
+        
+        # Get the GraphQL query from request body
+        body = await request.json()
+        query = body.get("query", "")
+        variables = body.get("variables", {})
+        
+        if not query:
+            raise HTTPException(status_code=400, detail="Missing GraphQL query")
+        
+        # Prepare the request to Shopify Customer Account API
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {customer_access_token}",
+            "X-Shopify-Store-Id": os.getenv("SHOPIFY_STORE_ID", "54938435697")
+        }
+        
+        payload = {
+            "query": query,
+            "variables": variables
+        }
+        
+        # Make the request to Shopify
+        api_url = os.getenv("SHOPIFY_CUSTOMER_ACCOUNT_API_URL", "https://shopify.com/customer-account/api/graphql")
+        response = requests.post(api_url, json=payload, headers=headers, timeout=30)
+        
+        if response.status_code != 200:
+            logging.error(f"Shopify API error: {response.status_code} - {response.text}")
+            raise HTTPException(status_code=response.status_code, detail="Shopify API error")
+        
+        return response.json()
+        
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Request error: {e}")
+        raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")
+    except Exception as e:
+        logging.error(f"Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
