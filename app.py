@@ -52,7 +52,7 @@ API_VERSION   = os.getenv("API_VERSION")
 ACCESS_TOKEN  = os.getenv("ACCESS_TOKEN")
 
 SHOPIFY_STORE_ID = os.getenv("SHOPIFY_STORE_ID")
-SHOPIFY_CUSTOMER_ACCOUNT_API_URL = f"https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}/graphql.json"
+SHOPIFY_CUSTOMER_ACCOUNT_API_URL = f"https://account.koreanbeautys.com/customer/api/2025-07/graphql"
 
 def send_telegram(token, chat_id, message):
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -743,4 +743,5 @@ async def customer_graphql_proxy(request: Request):
             status_code=500,
             content={"errors": [{"message": str(e)}]}
         )
+
 
