@@ -679,7 +679,6 @@ def get_discount(code: str = Query(..., description="Discount code to lookup")):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @app.post("/customer/graphql")
 async def customer_graphql_proxy(request: Request):
     """
@@ -688,13 +687,18 @@ async def customer_graphql_proxy(request: Request):
     try:
         # جلب التوكن من الهيدر
         auth_header = request.headers.get("Authorization", "")
-        if not auth_header.startswith("Bearer "):
+        
+        # إزالة كلمة "Bearer " إذا كانت موجودة
+        if auth_header.startswith("Bearer "):
+            customer_access_token = auth_header.replace("Bearer ", "").strip()
+        else:
+            customer_access_token = auth_header.strip()
+        
+        if not customer_access_token:
             return JSONResponse(
                 status_code=401, 
-                content={"errors": [{"message": "Missing or invalid Authorization header"}]}
+                content={"errors": [{"message": "Missing Authorization header"}]}
             )
-        
-        customer_access_token = auth_header.replace("Bearer ", "").strip()
         
         # جلب الاستعلام من البودي
         body = await request.json()
@@ -707,10 +711,10 @@ async def customer_graphql_proxy(request: Request):
                 content={"errors": [{"message": "Missing GraphQL query"}]}
             )
         
-        # إعداد الطلب لشوبيفاي
+        # إعداد الطلب لشوبيفاي - بدون كلمة Bearer
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"{customer_access_token}",
+            "Authorization": customer_access_token,  # بدون "Bearer"
             "X-Shopify-Store-Id": SHOPIFY_STORE_ID
         }
         
@@ -743,6 +747,3 @@ async def customer_graphql_proxy(request: Request):
             status_code=500,
             content={"errors": [{"message": str(e)}]}
         )
-
-
-
