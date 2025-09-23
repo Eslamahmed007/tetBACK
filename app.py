@@ -710,7 +710,7 @@ async def customer_graphql_proxy(request: Request):
         # إعداد الطلب لشوبيفاي
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {customer_access_token}",
+            "Authorization": f"{customer_access_token}",
             "X-Shopify-Store-Id": SHOPIFY_STORE_ID
         }
         
@@ -743,5 +743,6 @@ async def customer_graphql_proxy(request: Request):
             status_code=500,
             content={"errors": [{"message": str(e)}]}
         )
+
 
 
