@@ -23,6 +23,9 @@ from weasyprint import HTML , CSS
 from cachetools import TTLCache
 import time
 from fastapi import HTTPException
+from pydantic import BaseModel
+from typing import Optional, Dict, Any
+from datetime import datetime
 
 app = FastAPI()
 
@@ -747,3 +750,156 @@ async def customer_graphql_proxy(request: Request):
             status_code=500,
             content={"errors": [{"message": str(e)}]}
         )
+
+
+
+
+
+
+
+# نماذج البيانات للـ Notifications والـ Popups
+class NotificationRequest(BaseModel):
+    title: str
+    body: str
+    target_screen: Optional[str] = None  # 'home', 'cart', 'profile'
+    is_active: bool = True
+
+class PopupRequest(BaseModel):
+    title: str
+    description: str
+    image_url: Optional[str] = None
+    discount_code: Optional[str] = None
+    is_active: bool = True
+    show_once: bool = True  # تظهر مرة واحدة لكل مستخدم
+
+# تخزين مؤقت (في production استخدم قاعدة بيانات)
+notifications_db = []
+popups_db = []
+
+# Endpoint لإنشاء إشعار جديد
+@app.post("/admin/notification")
+async def create_notification(notification: NotificationRequest):
+    """
+    إنشاء إشعار جديد يمكن إرساله لجميع المستخدمين
+    """
+    notification_data = {
+        "id": len(notifications_db) + 1,
+        "title": notification.title,
+        "body": notification.body,
+        "target_screen": notification.target_screen,
+        "is_active": notification.is_active,
+        "created_at": datetime.now().isoformat()
+    }
+    notifications_db.append(notification_data)
+    
+    # إرسال إشعار فوري لجميع المستخدمين النشطين (اختياري)
+    if notification.is_active:
+        # هنا يمكنك إضافة منطق لإرسال الإشعارات فوراً
+        logging.info(f"New notification created: {notification.title}")
+    
+    return {"status": "success", "notification": notification_data}
+
+# Endpoint لجلب الإشعارات النشطة
+@app.get("/notifications/active")
+async def get_active_notifications():
+    """
+    جلب جميع الإشعارات النشطة للتطبيق
+    """
+    active_notifications = [n for n in notifications_db if n.get('is_active', True)]
+    return {"notifications": active_notifications}
+
+# Endpoint لتعطيل إشعار
+@app.put("/admin/notification/{notification_id}/deactivate")
+async def deactivate_notification(notification_id: int):
+    """
+    تعطيل إشعار معين
+    """
+    for notification in notifications_db:
+        if notification.get('id') == notification_id:
+            notification['is_active'] = False
+            return {"status": "success", "message": "Notification deactivated"}
+    
+    raise HTTPException(status_code=404, detail="Notification not found")
+
+# Endpoint لإنشاء popup جديد
+@app.post("/admin/popup")
+async def create_popup(popup: PopupRequest):
+    """
+    إنشاء أو تحديث popup للعرض في التطبيق
+    """
+    popup_data = {
+        "id": len(popups_db) + 1,
+        "title": popup.title,
+        "description": popup.description,
+        "image_url": popup.image_url,
+        "discount_code": popup.discount_code,
+        "is_active": popup.is_active,
+        "show_once": popup.show_once,
+        "created_at": datetime.now().isoformat()
+    }
+    popups_db.append(popup_data)
+    
+    logging.info(f"New popup created: {popup.title}")
+    return {"status": "success", "popup": popup_data}
+
+# Endpoint لجلب الـ popup النشط
+@app.get("/popup/active")
+async def get_active_popup():
+    """
+    جلب الـ popup النشط للعرض في التطبيق
+    """
+    active_popups = [p for p in popups_db if p.get('is_active', True)]
+    if active_popups:
+        # إرجاع أحدث popup نشط
+        latest_popup = sorted(active_popups, key=lambda x: x['created_at'], reverse=True)[0]
+        return {"popup": latest_popup}
+    return {"popup": None}
+
+# Endpoint لتعطيل popup
+@app.put("/admin/popup/{popup_id}/deactivate")
+async def deactivate_popup(popup_id: int):
+    """
+    تعطيل popup معين
+    """
+    for popup in popups_db:
+        if popup.get('id') == popup_id:
+            popup['is_active'] = False
+            return {"status": "success", "message": "Popup deactivated"}
+    
+    raise HTTPException(status_code=404, detail="Popup not found")
+
+# Endpoint لحذف popup
+@app.delete("/admin/popup/{popup_id}")
+async def delete_popup(popup_id: int):
+    """
+    حذف popup معين
+    """
+    global popups_db
+    popups_db = [p for p in popups_db if p.get('id') != popup_id]
+    return {"status": "success", "message": "Popup deleted"}
+
+# Endpoint لحذف إشعار
+@app.delete("/admin/notification/{notification_id}")
+async def delete_notification(notification_id: int):
+    """
+    حذف إشعار معين
+    """
+    global notifications_db
+    notifications_db = [n for n in notifications_db if n.get('id') != notification_id]
+    return {"status": "success", "message": "Notification deleted"}
+
+# Endpoint للحصول على جميع الـ popups (لأغراض الإدارة)
+@app.get("/admin/popups")
+async def get_all_popups():
+    """
+    جلب جميع الـ popups (للوحة التحكم)
+    """
+    return {"popups": popups_db}
+
+# Endpoint للحصول على جميع الإشعارات (لأغراض الإدارة)
+@app.get("/admin/notifications")
+async def get_all_notifications():
+    """
+    جلب جميع الإشعارات (للوحة التحكم)
+    """
+    return {"notifications": notifications_db}
