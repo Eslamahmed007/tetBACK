@@ -6,3 +6,4 @@ requests
 pdfkit
 WeasyPrint
 cachetools
+firebase-admin>=6.0.0
