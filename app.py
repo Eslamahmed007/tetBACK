@@ -26,6 +26,9 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 from datetime import datetime
+import firebase_admin
+from firebase_admin import credentials, messaging
+import json
 
 app = FastAPI()
 
@@ -903,3 +906,242 @@ async def get_all_notifications():
     جلب جميع الإشعارات (للوحة التحكم)
     """
     return {"notifications": notifications_db}
+
+
+
+
+
+def initialize_firebase():
+    try:
+        # استخدام متغير بيئة في Railway
+        service_account_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
+        
+        if service_account_json:
+            service_account_info = json.loads(service_account_json)
+            cred = credentials.Certificate(service_account_info)
+            firebase_admin.initialize_app(cred)
+            logging.info("✅ Firebase Admin initialized successfully")
+            return True
+        else:
+            logging.warning("❌ FIREBASE_SERVICE_ACCOUNT_JSON not found")
+            return False
+            
+    except Exception as e:
+        logging.error(f"❌ Error initializing Firebase Admin: {e}")
+        return False
+
+# استدعاء التهيئة
+firebase_initialized = initialize_firebase()
+
+# قائمة لتخزين التوكنات (استبدل بقاعدة بيانات في production)
+fcm_tokens_db = []
+
+# ==================== 🔥 نماذج البيانات الجديدة ====================
+
+class FCMNotificationRequest(BaseModel):
+    title: str
+    body: str
+    image_url: Optional[str] = None
+    data: Optional[Dict[str, Any]] = None
+
+class TopicSubscriptionRequest(BaseModel):
+    token: str
+    topic: str
+
+# ==================== 🔥 Endpoints جديدة للإشعارات ====================
+
+@app.post("/api/register-fcm-token")
+async def register_fcm_token(token: str = Query(..., description="FCM token from mobile app")):
+    """
+    تسجيل توكن FCM من التطبيق
+    """
+    try:
+        if not firebase_initialized:
+            return {"status": "error", "message": "Firebase not initialized"}
+        
+        if token and token not in fcm_tokens_db:
+            fcm_tokens_db.append(token)
+            logging.info(f"✅ New FCM token registered: {token[:20]}...")
+        
+        return {
+            "status": "success", 
+            "message": "Token registered successfully",
+            "total_tokens": len(fcm_tokens_db)
+        }
+    except Exception as e:
+        logging.error(f"❌ Error registering FCM token: {e}")
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/send-notification-to-all")
+async def send_notification_to_all(notification: FCMNotificationRequest):
+    """
+    إرسال إشعار لجميع المستخدمين المسجلين
+    """
+    try:
+        if not firebase_initialized:
+            return {"status": "error", "message": "Firebase not initialized"}
+        
+        if not fcm_tokens_db:
+            return {"status": "error", "message": "No registered tokens available"}
+        
+        # إنشاء رسالة multicast لجميع التوكنات
+        message = messaging.MulticastMessage(
+            tokens=fcm_tokens_db,
+            notification=messaging.Notification(
+                title=notification.title,
+                body=notification.body,
+                image=notification.image_url
+            ),
+            data=notification.data or {},
+            android=messaging.AndroidConfig(
+                priority='high',
+                notification=messaging.AndroidNotification(
+                    channel_id='high_importance_channel',
+                    sound='default'
+                )
+            )
+        )
+        
+        # إرسال الرسالة
+        response = messaging.send_multicast(message)
+        
+        logging.info(f"📤 Notification sent to {response.success_count} devices")
+        
+        return {
+            "status": "success",
+            "success_count": response.success_count,
+            "failure_count": response.failure_count,
+            "message": f"Notification sent to {response.success_count} devices"
+        }
+        
+    except Exception as e:
+        logging.error(f"❌ Error sending notification: {e}")
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/send-promotional-notification")
+async def send_promotional_notification():
+    """
+    إرسال إشعار ترويجي لجميع المستخدمين (مثال للعروض)
+    """
+    try:
+        if not firebase_initialized:
+            return {"status": "error", "message": "Firebase not initialized"}
+            
+        notification = FCMNotificationRequest(
+            title="🎉 عرض خاص من Korean Beauty!",
+            body="خصم 20% على كل المنتجات اليوم فقط. تسوقي الآن!",
+            data={"screen": "/home", "offer_id": "promo_123"}
+        )
+        
+        return await send_notification_to_all(notification)
+        
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.get("/api/notification-stats")
+async def get_notification_stats():
+    """
+    الحصول على إحصائيات التوكنات المسجلة
+    """
+    return {
+        "status": "success",
+        "total_registered_tokens": len(fcm_tokens_db),
+        "firebase_initialized": firebase_initialized
+    }
+
+# ==================== 🔥 إشعارات أوتوماتيكية للأوامر ====================
+
+def send_order_notification(order_data, notification_type):
+    """
+    إرسال إشعارات أوتوماتيكية بناءً على حالة الطلب
+    """
+    try:
+        if not firebase_initialized or not fcm_tokens_db:
+            return
+        
+        order_number = order_data.get("order_number", "")
+        customer_name = order_data.get("shipping_address", {}).get("name", "Customer")
+        
+        if notification_type == "new_order":
+            title = "🛍️ طلب جديد تم استلامه"
+            body = f"تم استلام طلب جديد #{order_number} من {customer_name}"
+            data = {"screen": "/orders", "order_id": order_data.get("id")}
+            
+        elif notification_type == "order_paid":
+            title = "💳 تم دفع الطلب"
+            body = f"تم دفع الطلب #{order_number} بنجاح"
+            data = {"screen": "/orders", "order_id": order_data.get("id")}
+            
+        elif notification_type == "order_shipped":
+            title = "🚚 تم شحن الطلب"
+            body = f"طلبك #{order_number} في طريق إليك"
+            data = {"screen": "/tracking", "order_id": order_data.get("id")}
+            
+        else:
+            return
+        
+        message = messaging.MulticastMessage(
+            tokens=fcm_tokens_db,
+            notification=messaging.Notification(title=title, body=body),
+            data=data
+        )
+        
+        messaging.send_multicast(message)
+        logging.info(f"✅ Auto-notification sent: {notification_type}")
+        
+    except Exception as e:
+        logging.error(f"❌ Error sending auto-notification: {e}")
+
+# ==================== 🔥 تحديث الـ webhook الحالي لإرسال إشعارات ====================
+
+@app.post("/webhook")
+async def handle_order(request: Request):
+    data = await request.json()
+    paid = data.get("financial_status", "")
+    
+    # إرسال إشعار للباك إند عند طلب جديد
+    send_order_notification(data, "new_order")
+    
+    if paid=="Paid" or paid=="paid":
+        # إرسال إشعار عند الدفع
+        send_order_notification(data, "order_paid")
+        return {"status": "paid - skipped"}
+    
+    elif "Instapay" in data.get("payment_gateway_names", []):
+        message = formatt_order_messag(data)
+        send_telegram(PRE_BOT_TOKEN, PRE_CHAT_ID, message)
+        return {"status": "sent to prepaid bot"}
+    
+    else:
+        message = format_order_messag(data)
+        send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
+        return {"status": "sent"}
+
+
+
+@app.post("/api/test-notification")
+async def test_notification():
+    """
+    endpoint لاختبار نظام الإشعارات
+    """
+    try:
+        if not firebase_initialized:
+            return {"status": "error", "message": "Firebase not initialized"}
+            
+        test_notification = FCMNotificationRequest(
+            title="✅ اختبار الإشعارات",
+            body="هذا إشعار اختبار من سيرفر Korean Beauty!",
+            data={"screen": "/home", "test": "true", "timestamp": str(datetime.now())}
+        )
+        
+        result = await send_notification_to_all(test_notification)
+        
+        # إرسال تأكيد للتليجرام أيضاً
+        send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, 
+                     f"🔔 تم إرسال إشعار اختبار إلى {result.get('success_count', 0)} جهاز")
+        
+        return result
+        
+    except Exception as e:
+        logging.error(f"❌ Error in test notification: {e}")
+        return {"status": "error", "message": str(e)}
