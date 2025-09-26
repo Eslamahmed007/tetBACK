@@ -192,25 +192,6 @@ Hi {name} Korean Beautys with you
     
     return msg
 
-@app.post("/webhook")
-async def handle_order(request: Request):
-    data = await request.json()
-    paid = data.get("financial_status", "")
-    if paid=="Paid" or paid=="paid":
-
-        return {"status": "paid - skipped"}
-    
-    elif "Instapay" in data.get("payment_gateway_names", []):
-        message = formatt_order_messag(data)
-        send_telegram(PRE_BOT_TOKEN, PRE_CHAT_ID, message)
-        return {"status": "sent to prepaid bot"}
-    
-
-    else:
-        message = format_order_messag(data)
-        send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
-
-        return {"status": "sent"}
 
 seen_edit = TTLCache(maxsize=1000, ttl=86400)
 
@@ -778,53 +759,6 @@ class PopupRequest(BaseModel):
 # تخزين مؤقت (في production استخدم قاعدة بيانات)
 notifications_db = []
 popups_db = []
-
-# Endpoint لإنشاء إشعار جديد
-@app.post("/admin/notification")
-async def create_notification(notification: NotificationRequest):
-    """
-    إنشاء إشعار جديد يمكن إرساله لجميع المستخدمين
-    """
-    notification_data = {
-        "id": len(notifications_db) + 1,
-        "title": notification.title,
-        "body": notification.body,
-        "target_screen": notification.target_screen,
-        "is_active": notification.is_active,
-        "created_at": datetime.now().isoformat()
-    }
-    notifications_db.append(notification_data)
-    
-    # إرسال إشعار فوري لجميع المستخدمين النشطين (اختياري)
-    if notification.is_active:
-        # هنا يمكنك إضافة منطق لإرسال الإشعارات فوراً
-        logging.info(f"New notification created: {notification.title}")
-    
-    return {"status": "success", "notification": notification_data}
-
-# Endpoint لجلب الإشعارات النشطة
-@app.get("/notifications/active")
-async def get_active_notifications():
-    """
-    جلب جميع الإشعارات النشطة للتطبيق
-    """
-    active_notifications = [n for n in notifications_db if n.get('is_active', True)]
-    return {"notifications": active_notifications}
-
-# Endpoint لتعطيل إشعار
-@app.put("/admin/notification/{notification_id}/deactivate")
-async def deactivate_notification(notification_id: int):
-    """
-    تعطيل إشعار معين
-    """
-    for notification in notifications_db:
-        if notification.get('id') == notification_id:
-            notification['is_active'] = False
-            return {"status": "success", "message": "Notification deactivated"}
-    
-    raise HTTPException(status_code=404, detail="Notification not found")
-
-# Endpoint لإنشاء popup جديد
 @app.post("/admin/popup")
 async def create_popup(popup: PopupRequest):
     """
@@ -881,16 +815,6 @@ async def delete_popup(popup_id: int):
     popups_db = [p for p in popups_db if p.get('id') != popup_id]
     return {"status": "success", "message": "Popup deleted"}
 
-# Endpoint لحذف إشعار
-@app.delete("/admin/notification/{notification_id}")
-async def delete_notification(notification_id: int):
-    """
-    حذف إشعار معين
-    """
-    global notifications_db
-    notifications_db = [n for n in notifications_db if n.get('id') != notification_id]
-    return {"status": "success", "message": "Notification deleted"}
-
 # Endpoint للحصول على جميع الـ popups (لأغراض الإدارة)
 @app.get("/admin/popups")
 async def get_all_popups():
@@ -898,17 +822,6 @@ async def get_all_popups():
     جلب جميع الـ popups (للوحة التحكم)
     """
     return {"popups": popups_db}
-
-# Endpoint للحصول على جميع الإشعارات (لأغراض الإدارة)
-@app.get("/admin/notifications")
-async def get_all_notifications():
-    """
-    جلب جميع الإشعارات (للوحة التحكم)
-    """
-    return {"notifications": notifications_db}
-
-
-
 
 
 def initialize_firebase():
@@ -1003,7 +916,7 @@ async def send_notification_to_all(notification: FCMNotificationRequest):
         )
         
         # إرسال الرسالة
-        response = messaging.send_multicast(message)
+        response = messaging.send_each_for_multicast(message)
         
         logging.info(f"📤 Notification sent to {response.success_count} devices")
         
@@ -1086,7 +999,7 @@ def send_order_notification(order_data, notification_type):
             data=data
         )
         
-        messaging.send_multicast(message)
+        messaging.send_each_for_multicast(message)
         logging.info(f"✅ Auto-notification sent: {notification_type}")
         
     except Exception as e:
@@ -1137,11 +1050,10 @@ async def test_notification():
         result = await send_notification_to_all(test_notification)
         
         # إرسال تأكيد للتليجرام أيضاً
-        send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, 
-                     f"🔔 تم إرسال إشعار اختبار إلى {result.get('success_count', 0)} جهاز")
         
         return result
         
     except Exception as e:
         logging.error(f"❌ Error in test notification: {e}")
         return {"status": "error", "message": str(e)}
+
