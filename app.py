@@ -1012,12 +1012,9 @@ async def handle_order(request: Request):
     data = await request.json()
     paid = data.get("financial_status", "")
     
-    # إرسال إشعار للباك إند عند طلب جديد
-    send_order_notification(data, "new_order")
     
     if paid=="Paid" or paid=="paid":
         # إرسال إشعار عند الدفع
-        send_order_notification(data, "order_paid")
         return {"status": "paid - skipped"}
     
     elif "Instapay" in data.get("payment_gateway_names", []):
@@ -1056,4 +1053,5 @@ async def test_notification():
     except Exception as e:
         logging.error(f"❌ Error in test notification: {e}")
         return {"status": "error", "message": str(e)}
+
 
