@@ -1055,3 +1055,85 @@ async def test_notification():
         return {"status": "error", "message": str(e)}
 
 
+
+@app.post("/check-products-availability")
+async def check_products_availability(request: Request):
+    try:
+        data = await request.json()
+        items = data.get('items', [])
+        
+        # قائمة لتخزين المنتجات غير المتوفرة
+        unavailable_items = []
+        
+        for item in items:
+            variant_id = item.get('variant_id')
+            requested_quantity = item.get('quantity')
+            
+            if not variant_id:
+                continue
+            
+            # استعلام إلى Shopify للتحقق من توفر المنتج
+            query = '''
+            query {
+                productVariant(id: "%s") {
+                    inventoryQuantity
+                    title
+                    product {
+                        title
+                    }
+                }
+            }
+            ''' % variant_id
+
+            response = requests.post(
+                f'https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}/graphql.json',
+                headers={
+                    'Content-Type': 'application/json',
+                    'X-Shopify-Access-Token': ACCESS_TOKEN
+                },
+                json={'query': query}
+            )
+
+            if response.status_code == 200:
+                variant_data = response.json().get('data', {}).get('productVariant', {})
+                available_quantity = variant_data.get('inventoryQuantity', 0)
+                product_title = variant_data.get('product', {}).get('title', 'Unknown Product')
+                variant_title = variant_data.get('title', '')
+                
+                # إذا الكمية المطلوبة أكبر من المتاحة
+                if available_quantity < requested_quantity:
+                    unavailable_items.append({
+                        'product_title': product_title,
+                        'variant_title': variant_title,
+                        'requested_quantity': requested_quantity,
+                        'available_quantity': available_quantity,
+                        'variant_id': variant_id
+                    })
+            else:
+                # إذا فشل الاستعلام، نعتبر المنتج غير متوفر
+                unavailable_items.append({
+                    'product_title': 'Unknown Product',
+                    'variant_title': '',
+                    'requested_quantity': requested_quantity,
+                    'available_quantity': 0,
+                    'variant_id': variant_id
+                })
+
+        if unavailable_items:
+            return {
+                'status': 'unavailable',
+                'message': 'Some products are not available in the requested quantities',
+                'unavailable_items': unavailable_items
+            }
+        else:
+            return {
+                'status': 'available',
+                'message': 'All products are available'
+            }
+            
+    except Exception as e:
+        logging.error(f"Error checking product availability: {e}")
+        return {
+            'status': 'error',
+            'message': f'Error checking availability: {str(e)}'
+        }
