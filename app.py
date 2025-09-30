@@ -1137,3 +1137,148 @@ async def check_products_availability(request: Request):
             'status': 'error',
             'message': f'Error checking availability: {str(e)}'
         }
+
+
+
+SHOPIFY_ADMIN_URL = f"https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}"
+
+@app.post("/create-order")
+async def create_order(request: Request):
+    """
+    إنشاء طلب مباشر باستخدام Shopify Admin API
+    """
+    try:
+        data = await request.json()
+        
+        # ✅ التحقق من البيانات الأساسية
+        required_fields = ['line_items', 'customer', 'shipping_address']
+        for field in required_fields:
+            if field not in data:
+                raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
+
+        # ✅ إعداد بيانات الطلب لـ Shopify
+        order_data = {
+            "order": {
+                "line_items": data['line_items'],
+                "customer": data.get('customer', {}),
+                "shipping_address": data['shipping_address'],
+                "billing_address": data.get('billing_address', data['shipping_address']),
+                "email": data.get('email', ''),
+                "phone": data.get('phone', ''),
+                "financial_status": "pending",  # سيتم الدفع كاش عند الاستلام
+                "fulfillment_status": None,
+                "send_receipt": True,
+                "send_fulfillment_receipt": False,
+                "note": data.get('note', 'Order from Mobile App'),
+                "tags": "mobile-app, cod",
+                "currency": "EGP",
+                "total_tax": 0,
+                "subtotal_price": data.get('subtotal_amount', 0),
+                "total_discounts": data.get('discount_amount', 0),
+                "total_price": data.get('total_amount', 0),
+            }
+        }
+
+        # ✅ إرسال الطلب لـ Shopify
+        headers = {
+            "Content-Type": "application/json",
+            "X-Shopify-Access-Token": ACCESS_TOKEN
+        }
+        
+        response = requests.post(
+            f"{SHOPIFY_ADMIN_URL}/orders.json",
+            headers=headers,
+            json=order_data
+        )
+
+        if response.status_code == 201:
+            order_response = response.json()
+            order = order_response['order']
+            
+            # ✅ إرسال إشعار للتليجرام
+            try:
+                order_number = order['name']
+                total_price = order['total_price']
+                customer_name = f"{order['customer'].get('first_name', '')} {order['customer'].get('last_name', '')}".strip()
+                customer_phone = order.get('phone', '')
+                
+                telegram_message = f"""
+🛍️ **طلب جديد من التطبيق**
+📦 رقم الطلب: {order_number}
+👤 العميل: {customer_name or 'غير محدد'}
+📞 الهاتف: {customer_phone}
+💰 الإجمالي: {total_price} EGP
+📍 الطريقة: الدفع عند الاستلام
+                """
+                
+                send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, telegram_message)
+                
+            except Exception as telegram_error:
+                logging.error(f"Failed to send telegram notification: {telegram_error}")
+
+            return {
+                "status": "success",
+                "order_id": order['id'],
+                "order_number": order['name'],
+                "order_status": order['financial_status'],
+                "total_amount": order['total_price'],
+                "message": "Order created successfully"
+            }
+        else:
+            error_detail = response.json().get('errors', 'Unknown error')
+            logging.error(f"Shopify API Error: {response.status_code} - {error_detail}")
+            raise HTTPException(status_code=response.status_code, detail=f"Shopify API Error: {error_detail}")
+
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Network error: {e}")
+        raise HTTPException(status_code=500, detail=f"Network error: {str(e)}")
+    except Exception as e:
+        logging.error(f"Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/create-checkout")
+async def create_checkout(request: Request):
+    """
+    endpoint متوافق مع التطبيق الحالي - يستخدم النظام الجديد
+    """
+    try:
+        data = await request.json()
+        
+        # تحويل البيانات من التطبيق إلى تنسيق Shopify
+        line_items = []
+        for item in data.get('line_items', []):
+            line_items.append({
+                "variant_id": item.get('variant_id'),
+                "quantity": item.get('quantity', 1),
+                "price": item.get('price'),
+                "title": item.get('title', 'Product')
+            })
+        
+        # إعداد بيانات العميل
+        shipping_address = data.get('shipping_address', {})
+        customer_data = {
+            "first_name": shipping_address.get('first_name', ''),
+            "last_name": shipping_address.get('last_name', ''),
+            "email": data.get('email', ''),
+            "phone": shipping_address.get('phone', ''),
+        }
+        
+        order_payload = {
+            "line_items": line_items,
+            "customer": customer_data,
+            "shipping_address": shipping_address,
+            "billing_address": shipping_address,
+            "email": data.get('email', ''),
+            "phone": shipping_address.get('phone', ''),
+            "subtotal_amount": data.get('subtotal_amount', 0),
+            "discount_amount": data.get('discount_amount', 0),
+            "total_amount": data.get('total_amount', 0),
+            "note": data.get('note', 'Order from Mobile App')
+        }
+        
+        # استخدام endpoint إنشاء الطلب الجديد
+        return await create_order(Request(scope=request.scope, receive=request.receive))
+        
+    except Exception as e:
+        logging.error(f"Error in create-checkout: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
