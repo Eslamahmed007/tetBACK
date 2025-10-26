@@ -32,6 +32,54 @@ import json
 
 app = FastAPI()
 
+# ==================== 🔥 MIDDLEWARE لتسجيل الـ Requests والـ Responses ====================
+import time
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class LoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        start_time = time.time()
+        request_id = f"{time.time():.0f}"
+        
+        # تسجيل الطلب الوارد
+        logging.info(f"🔵 REQUEST [{request_id}] {request.method} {request.url}")
+        logging.info(f"🔵 Headers: {dict(request.headers)}")
+        
+        # محاولة تسجيل body إذا كان موجوداً
+        try:
+            if request.method in ["POST", "PUT", "PATCH"]:
+                body = await request.body()
+                if body:
+                    body_str = body.decode()
+                    # تقليل حجم الـ log إذا كان كبيراً
+                    if len(body_str) > 1000:
+                        logging.info(f"🔵 Body (truncated): {body_str[:1000]}...")
+                    else:
+                        logging.info(f"🔵 Body: {body_str}")
+                    
+                    # إعادة تعيين body للطلب
+                    async def receive():
+                        return {'type': 'http.request', 'body': body, 'more_body': False}
+                    request._receive = receive
+        except Exception as e:
+            logging.info(f"🔵 Could not read body: {e}")
+        
+        # معالجة الطلب
+        response = await call_next(request)
+        
+        # حساب وقت الاستجابة
+        process_time = time.time() - start_time
+        
+        # تسجيل الرد
+        logging.info(f"🟢 RESPONSE [{request_id}] Status: {response.status_code}")
+        logging.info(f"🟢 Process time: {process_time:.3f}s")
+        
+        return response
+
+# إضافة الـ middleware للتطبيق
+app.add_middleware(LoggingMiddleware)
+
+# ==================== 🔥 المتغيرات البيئية ====================
 MAIL_TOKEN = os.getenv("MAIL_TOKEN")
 EME = os.getenv("EME")
 
@@ -197,34 +245,47 @@ seen_edit = TTLCache(maxsize=1000, ttl=86400)
 
 @app.post("/edit")
 async def edit_order(request: Request):
-    data1 = await request.json() 
-    order_id = data1.get("order_edit").get("order_id")
+    try:
+        data1 = await request.json() 
+        order_id = data1.get("order_edit").get("order_id")
+        if order_id in seen_edit:
+            result = {"status": "duplicate_tracking_skipped"}
+            logging.info(f"📝 /edit - Duplicate order {order_id}, skipping")
+            return result
 
-    seen_edit[order_id] = True
-    
-    shop_url = f"https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}/orders/{order_id}.json"
-    shop_resp = requests.get(
-        shop_url,
-        headers={"X-Shopify-Access-Token": ACCESS_TOKEN}
-    )
-    shop_resp.raise_for_status()
-    data = shop_resp.json().get("order", {})
-    paid = data.get("financial_status", "")
-    if paid=="Paid" or paid=="paid":
+        seen_edit[order_id] = True
+        
+        shop_url = f"https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}/orders/{order_id}.json"
+        shop_resp = requests.get(
+            shop_url,
+            headers={"X-Shopify-Access-Token": ACCESS_TOKEN}
+        )
+        shop_resp.raise_for_status()
+        data = shop_resp.json().get("order", {})
+        paid = data.get("financial_status", "")
+        if paid=="Paid" or paid=="paid":
+            result = {"status": "paid - skipped"}
+            logging.info(f"📝 /edit - Order {order_id} already paid, skipping")
+            return result
+        
+        elif "Instapay" in data.get("payment_gateway_names", []):
+            message = formatt_order_messag(data)
+            send_telegram(PRE_BOT_TOKEN, PRE_CHAT_ID, message)
+            result = {"status": "sent to prepaid bot"}
+            logging.info(f"📝 /edit - Order {order_id} sent to prepaid bot")
+            return result
+        
 
-        return {"status": "paid - skipped"}
-    
-    elif "Instapay" in data.get("payment_gateway_names", []):
-        message = formatt_order_messag(data)
-        send_telegram(PRE_BOT_TOKEN, PRE_CHAT_ID, message)
-        return {"status": "sent to prepaid bot"}
-    
+        else:
+            message = format_order_messag(data)
+            send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
+            result = {"status": "sent"}
+            logging.info(f"📝 /edit - Order {order_id} sent to other bot")
+            return result
 
-    else:
-        message = format_order_messag(data)
-        send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
-
-        return {"status": "sent"}
+    except Exception as e:
+        logging.error(f"❌ /edit - Error: {e}")
+        return {"status": "error", "message": str(e)}
 
 
 
@@ -232,88 +293,123 @@ seen_ord = TTLCache(maxsize=1000, ttl=86400)
 
 @app.post("/cancel")
 async def cancel_order(request: Request):
-    data = await request.json()
-    order_id = data.get("order_id")
+    try:
+        data = await request.json()
+        order_id = data.get("order_id")
+        if order_id in seen_ord:
+            result = {"status": "duplicate_tracking_skipped"}
+            logging.info(f"📝 /cancel - Duplicate order {order_id}, skipping")
+            return result
 
+        seen_ord[order_id] = True
+        paid = data.get("financial_status", "")
+        
+        if paid=="Paid" or paid=="paid":
+            result = {"status": "paid - skipped"}
+            logging.info(f"📝 /cancel - Order {order_id} already paid, skipping")
+            return result
+        
+        elif "Instapay" in data.get("payment_gateway_names", []):
+            message = cancell(data)
+            send_telegram(PRE_BOT_TOKEN, PRE_CHAT_ID, message)
+            result = {"status": "sent to prepaid bot"}
+            logging.info(f"📝 /cancel - Order {order_id} sent to prepaid bot")
+            return result
+        
 
-    seen_ord[order_id] = True
-    paid = data.get("financial_status", "")
-    
-    if paid=="Paid" or paid=="paid":
+        else:
+            message = cancell(data)
+            send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
+            result = {"status": "sent"}
+            logging.info(f"📝 /cancel - Order {order_id} sent to other bot")
+            return result
 
-        return {"status": "paid - skipped"}
-    
-    elif "Instapay" in data.get("payment_gateway_names", []):
-        message = cancell(data)
-        send_telegram(PRE_BOT_TOKEN, PRE_CHAT_ID, message)
-        return {"status": "sent to prepaid bot"}
-    
-
-    else:
-        message = cancell(data)
-        send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
-
-        return {"status": "sent"}
+    except Exception as e:
+        logging.error(f"❌ /cancel - Error: {e}")
+        return {"status": "error", "message": str(e)}
 
 @app.get("/confirm")
 def notify_order(order_number: str):
-    message = f"🔔 order: {order_number} has been delivered successfully"
-    send_telegram(CON_BOT_TOKEN, CON_CHAT_ID, message)
-    return {"status": "message sent", "order": order_number}
+    try:
+        message = f"🔔 order: {order_number} has been delivered successfully"
+        send_telegram(CON_BOT_TOKEN, CON_CHAT_ID, message)
+        result = {"status": "message sent", "order": order_number}
+        logging.info(f"📝 /confirm - Order {order_number} confirmed")
+        return result
+    except Exception as e:
+        logging.error(f"❌ /confirm - Error: {e}")
+        return {"status": "error", "message": str(e)}
 
 
 @app.post("/zoho-mail-webhook")
 async def zoho_mail_webhook(req: Request):
-    data = await req.json()
+    try:
+        data = await req.json()
 
-    sender = data.get("fromAddress", "Unknown Sender")
-    subject = data.get("subject", "No Subject")
-    summary = data.get("summary", "")
-    
-    message = f"""📧 New Email Received
+        sender = data.get("fromAddress", "Unknown Sender")
+        subject = data.get("subject", "No Subject")
+        summary = data.get("summary", "")
+        
+        message = f"""📧 New Email Received
 From: {sender}
 Subject: {subject}
 Snippet: {summary}"""
 
-    url = f"https://api.telegram.org/bot{MAIL_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": OTHER_CHAT_ID,
-        "text": message
-    }
-    requests.post(url, data=payload)
-    
-    return {"status": "Message sent to Telegram"}
+        url = f"https://api.telegram.org/bot{MAIL_TOKEN}/sendMessage"
+        payload = {
+            "chat_id": OTHER_CHAT_ID,
+            "text": message
+        }
+        requests.post(url, data=payload)
+        
+        result = {"status": "Message sent to Telegram"}
+        logging.info(f"📝 /zoho-mail-webhook - Email from {sender} forwarded")
+        return result
+
+    except Exception as e:
+        logging.error(f"❌ /zoho-mail-webhook - Error: {e}")
+        return {"status": "error", "message": str(e)}
 
 
 @app.post("/bosta-webhook")
 def handle_bosta_webhook(request: Request):
-    data = request.json()
-    
-    state = data.get("state")
-    tracking = data.get("trackingNumber")
-    business_ref = data.get("businessReference", "")
-    
-    if state == 103:
-        msg = f"📦 🦺Emergence🦺 \nTracking #: {tracking}\nBusiness Ref: {business_ref}\nStatus: Awaiting your action"
-        send_telegram(EME, CON_CHAT_ID, msg)
-        return {"status": "notified"}
-    elif state == 100:
-        msg = f"📦 🦺Emergence🦺 \nTracking #: {tracking}\nBusiness Ref: {business_ref}\nStatus: Package Lost"
-        send_telegram(EME, CON_CHAT_ID, msg)
-        return {"status": "notified"}
-    elif state == 101:
-        msg = f"📦 🦺Emergence🦺 \nTracking #: {tracking}\nBusiness Ref: {business_ref}\nStatus: Package Damaged"
-        send_telegram(EME, CON_CHAT_ID, msg)
-        return {"status": "notified"}
-    else:
-        return {"status": "ignored", "state": state}
+    try:
+        data = request.json()
+        
+        state = data.get("state")
+        tracking = data.get("trackingNumber")
+        business_ref = data.get("businessReference", "")
+        
+        if state == 103:
+            msg = f"📦 🦺Emergence🦺 \nTracking #: {tracking}\nBusiness Ref: {business_ref}\nStatus: Awaiting your action"
+            send_telegram(EME, CON_CHAT_ID, msg)
+            result = {"status": "notified"}
+            logging.info(f"📝 /bosta-webhook - Emergency notification for tracking {tracking}")
+            return result
+        elif state == 100:
+            msg = f"📦 🦺Emergence🦺 \nTracking #: {tracking}\nBusiness Ref: {business_ref}\nStatus: Package Lost"
+            send_telegram(EME, CON_CHAT_ID, msg)
+            result = {"status": "notified"}
+            logging.info(f"📝 /bosta-webhook - Package lost for tracking {tracking}")
+            return result
+        elif state == 101:
+            msg = f"📦 🦺Emergence🦺 \nTracking #: {tracking}\nBusiness Ref: {business_ref}\nStatus: Package Damaged"
+            send_telegram(EME, CON_CHAT_ID, msg)
+            result = {"status": "notified"}
+            logging.info(f"📝 /bosta-webhook - Package damaged for tracking {tracking}")
+            return result
+        else:
+            result = {"status": "ignored", "state": state}
+            logging.info(f"📝 /bosta-webhook - Ignored state {state} for tracking {tracking}")
+            return result
+
+    except Exception as e:
+        logging.error(f"❌ /bosta-webhook - Error: {e}")
+        return {"status": "error", "message": str(e)}
 
 
 last_tracking_number = None
 last_order_name = None
-
-
-
 
 def fetch_product_images(line_items):
     image_map = {}
@@ -516,10 +612,6 @@ def send_invoice_to_telegram(order: dict, image_map: dict):
     except Exception as e:
         logging.error(f"Failed to send invoice: {e}")
 
-
-
-
-
 seen_trackings = TTLCache(maxsize=1000, ttl=86400)
 
 @app.post("/tracking")
@@ -529,7 +621,9 @@ async def save_and_send_tracking(request: Request):
         tracking = data.get("tracking_number", "")
         order_name = data.get("name", "").replace(".1", "")
         if tracking in seen_trackings:
-            return {"status": "duplicate_tracking_skipped"}
+            result = {"status": "duplicate_tracking_skipped"}
+            logging.info(f"📝 /tracking - Duplicate tracking {tracking}, skipping")
+            return result
 
         seen_trackings[tracking] = True
 
@@ -567,10 +661,12 @@ async def save_and_send_tracking(request: Request):
         image_map = fetch_product_images(order.get("line_items", []))
         send_invoice_to_telegram(order, image_map)
 
-        return {"status": "awb_sent_and_invoice_sent"}
+        result = {"status": "awb_sent_and_invoice_sent"}
+        logging.info(f"📝 /tracking - Success for order {order_name}, tracking {tracking}")
+        return result
 
     except Exception as e:
-        logging.error(f"Error during /tracking execution: {e}")
+        logging.error(f"❌ /tracking - Error: {e}")
         return {"status": "error", "message": str(e)}
     
 
@@ -582,7 +678,9 @@ async def handle_payment(request: Request):
         data = await request.json()
         order_id = data.get("order_id")
         if order_id in seen_paid:
-            return {"status": "duplicate_tracking_skipped"}
+            result = {"status": "duplicate_tracking_skipped"}
+            logging.info(f"📝 /payment - Duplicate order {order_id}, skipping")
+            return result
 
         seen_paid[order_id] = True
         gateways = data.get("payment_gateway_names", [])
@@ -596,23 +694,26 @@ async def handle_payment(request: Request):
             non=data.get("shipping_address", {}).get("city", "")
 
             send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
+            result = {"status": "success"}
+            logging.info(f"📝 /payment - COD order {order_id} processed")
 
         elif "Instapay" in gateways:
             send_telegram(PRE_BOT_TOKEN, PRE_CHAT_ID, message)
-            return {"status": "sent to instapay bot"}
+            result = {"status": "sent to instapay bot"}
+            logging.info(f"📝 /payment - Instapay order {order_id} sent to prepaid bot")
+            return result
 
-
-        return {"status": "success"}
+        logging.info(f"📝 /payment - Order {order_id} processed with gateways: {gateways}")
+        return result
 
     except Exception as e:
-        logging.error(f"Error in /payment: {e}")
+        logging.error(f"❌ /payment - Error: {e}")
         return {"status": "error", "message": str(e)}
 
 
 @app.get("/discount")
 def get_discount(code: str = Query(..., description="Discount code to lookup")):
     try:
-
         BASE_URL = f"https://{SHOP_NAME}.myshopify.com/admin/api/{API_VERSION}"
         HEADERS = {
             "Content-Type": "application/json",
@@ -654,13 +755,16 @@ def get_discount(code: str = Query(..., description="Discount code to lookup")):
             formatted_value = str(raw_value)
 
         # Final simplified response
-        return {
+        result = {
             "code": discount_data.get("code"),
             "type": value_type,
             "value": formatted_value
         }
+        logging.info(f"📝 /discount - Lookup for code {code}: {result}")
+        return result
 
     except Exception as e:
+        logging.error(f"❌ /discount - Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/customer/graphql")
@@ -717,26 +821,37 @@ async def customer_graphql_proxy(request: Request):
                 content={"errors": [{"message": "Shopify API error"}]}
             )
         
-        return response.json()
+        result = response.json()
+        logging.info(f"📝 /customer/graphql - Query executed successfully")
+        return result
         
     except requests.exceptions.RequestException as e:
-        logging.error(f"Request error: {e}")
+        logging.error(f"❌ /customer/graphql - Request error: {e}")
         return JSONResponse(
             status_code=500,
             content={"errors": [{"message": f"Proxy error: {str(e)}"}]}
         )
     except Exception as e:
-        logging.error(f"Unexpected error: {e}")
+        logging.error(f"❌ /customer/graphql - Unexpected error: {e}")
         return JSONResponse(
             status_code=500,
             content={"errors": [{"message": str(e)}]}
         )
 
+# ==================== 🔥 endpoint لفحص حالة الـ logging ====================
 
+@app.get("/debug-log")
+async def debug_log():
+    """Endpoint لاختبار نظام الـ logging"""
+    test_data = {
+        "message": "هذا اختبار للـ logging",
+        "timestamp": datetime.now().isoformat(),
+        "status": "success"
+    }
+    logging.info(f"🔍 DEBUG LOG - Test message: {test_data}")
+    return test_data
 
-
-
-
+# ==================== 🔥 باقي الكود الحالي بدون تغيير ====================
 
 # نماذج البيانات للـ Notifications والـ Popups
 class NotificationRequest(BaseModel):
@@ -1213,7 +1328,7 @@ async def create_order(request: Request):
             except Exception as telegram_error:
                 logging.error(f"Failed to send telegram notification: {telegram_error}")
 
-            return {
+            result = {
                 "status": "success",
                 "order_id": order['id'],
                 "order_number": order['name'],
@@ -1221,6 +1336,8 @@ async def create_order(request: Request):
                 "total_amount": order['total_price'],
                 "message": "Order created successfully"
             }
+            logging.info(f"📝 /create-order - Order {order['name']} created successfully")
+            return result
         else:
             error_detail = response.json().get('errors', 'Unknown error')
             logging.error(f"Shopify API Error: {response.status_code} - {error_detail}")
@@ -1279,5 +1396,3 @@ async def create_checkout(request: Request):
     except Exception as e:
         logging.error(f"Error in create-checkout: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
