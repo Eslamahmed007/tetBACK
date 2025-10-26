@@ -32,37 +32,13 @@ import json
 
 app = FastAPI()
 
-# ==================== 🔥 MIDDLEWARE لتسجيل الـ Requests والـ Responses ====================
+# ==================== 🔥 MIDDLEWARE مبسط جداً ====================
 import time
 from starlette.middleware.base import BaseHTTPMiddleware
 
-class LoggingMiddleware(BaseHTTPMiddleware):
+class MinimalLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         start_time = time.time()
-        request_id = f"{time.time():.0f}"
-        
-        # تسجيل الطلب الوارد
-        logging.info(f"🔵 REQUEST [{request_id}] {request.method} {request.url}")
-        logging.info(f"🔵 Headers: {dict(request.headers)}")
-        
-        # محاولة تسجيل body إذا كان موجوداً
-        try:
-            if request.method in ["POST", "PUT", "PATCH"]:
-                body = await request.body()
-                if body:
-                    body_str = body.decode()
-                    # تقليل حجم الـ log إذا كان كبيراً
-                    if len(body_str) > 1000:
-                        logging.info(f"🔵 Body (truncated): {body_str[:1000]}...")
-                    else:
-                        logging.info(f"🔵 Body: {body_str}")
-                    
-                    # إعادة تعيين body للطلب
-                    async def receive():
-                        return {'type': 'http.request', 'body': body, 'more_body': False}
-                    request._receive = receive
-        except Exception as e:
-            logging.info(f"🔵 Could not read body: {e}")
         
         # معالجة الطلب
         response = await call_next(request)
@@ -70,14 +46,15 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         # حساب وقت الاستجابة
         process_time = time.time() - start_time
         
-        # تسجيل الرد
-        logging.info(f"🟢 RESPONSE [{request_id}] Status: {response.status_code}")
-        logging.info(f"🟢 Process time: {process_time:.3f}s")
+        # تسجيل مبسط جداً للـ endpoints المهمة فقط
+        important_paths = ["/edit", "/cancel", "/webhook", "/payment", "/tracking"]
+        if request.url.path in important_paths:
+            logging.info(f"📦 {request.url.path} - {process_time:.3f}s")
         
         return response
 
-# إضافة الـ middleware للتطبيق
-app.add_middleware(LoggingMiddleware)
+# إضافة الـ middleware المبسط جداً
+app.add_middleware(MinimalLoggingMiddleware)
 
 # ==================== 🔥 المتغيرات البيئية ====================
 MAIL_TOKEN = os.getenv("MAIL_TOKEN")
@@ -250,7 +227,7 @@ async def edit_order(request: Request):
         order_id = data1.get("order_edit").get("order_id")
         if order_id in seen_edit:
             result = {"status": "duplicate_tracking_skipped"}
-            logging.info(f"📝 /edit - Duplicate order {order_id}, skipping")
+            logging.info(f"🔄 duplicate_tracking_skipped")
             return result
 
         seen_edit[order_id] = True
@@ -265,14 +242,14 @@ async def edit_order(request: Request):
         paid = data.get("financial_status", "")
         if paid=="Paid" or paid=="paid":
             result = {"status": "paid - skipped"}
-            logging.info(f"📝 /edit - Order {order_id} already paid, skipping")
+            logging.info(f"💰 paid - skipped")
             return result
         
         elif "Instapay" in data.get("payment_gateway_names", []):
             message = formatt_order_messag(data)
             send_telegram(PRE_BOT_TOKEN, PRE_CHAT_ID, message)
             result = {"status": "sent to prepaid bot"}
-            logging.info(f"📝 /edit - Order {order_id} sent to prepaid bot")
+            logging.info(f"📤 sent to prepaid bot")
             return result
         
 
@@ -280,11 +257,11 @@ async def edit_order(request: Request):
             message = format_order_messag(data)
             send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
             result = {"status": "sent"}
-            logging.info(f"📝 /edit - Order {order_id} sent to other bot")
+            logging.info(f"📨 sent")
             return result
 
     except Exception as e:
-        logging.error(f"❌ /edit - Error: {e}")
+        logging.error(f"❌ edit error: {e}")
         return {"status": "error", "message": str(e)}
 
 
@@ -298,7 +275,7 @@ async def cancel_order(request: Request):
         order_id = data.get("order_id")
         if order_id in seen_ord:
             result = {"status": "duplicate_tracking_skipped"}
-            logging.info(f"📝 /cancel - Duplicate order {order_id}, skipping")
+            logging.info(f"🔄 duplicate_tracking_skipped")
             return result
 
         seen_ord[order_id] = True
@@ -306,14 +283,14 @@ async def cancel_order(request: Request):
         
         if paid=="Paid" or paid=="paid":
             result = {"status": "paid - skipped"}
-            logging.info(f"📝 /cancel - Order {order_id} already paid, skipping")
+            logging.info(f"💰 paid - skipped")
             return result
         
         elif "Instapay" in data.get("payment_gateway_names", []):
             message = cancell(data)
             send_telegram(PRE_BOT_TOKEN, PRE_CHAT_ID, message)
             result = {"status": "sent to prepaid bot"}
-            logging.info(f"📝 /cancel - Order {order_id} sent to prepaid bot")
+            logging.info(f"📤 sent to prepaid bot")
             return result
         
 
@@ -321,11 +298,11 @@ async def cancel_order(request: Request):
             message = cancell(data)
             send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
             result = {"status": "sent"}
-            logging.info(f"📝 /cancel - Order {order_id} sent to other bot")
+            logging.info(f"📨 sent")
             return result
 
     except Exception as e:
-        logging.error(f"❌ /cancel - Error: {e}")
+        logging.error(f"❌ cancel error: {e}")
         return {"status": "error", "message": str(e)}
 
 @app.get("/confirm")
@@ -334,10 +311,10 @@ def notify_order(order_number: str):
         message = f"🔔 order: {order_number} has been delivered successfully"
         send_telegram(CON_BOT_TOKEN, CON_CHAT_ID, message)
         result = {"status": "message sent", "order": order_number}
-        logging.info(f"📝 /confirm - Order {order_number} confirmed")
+        logging.info(f"✅ confirmed: {order_number}")
         return result
     except Exception as e:
-        logging.error(f"❌ /confirm - Error: {e}")
+        logging.error(f"❌ confirm error: {e}")
         return {"status": "error", "message": str(e)}
 
 
@@ -363,11 +340,11 @@ Snippet: {summary}"""
         requests.post(url, data=payload)
         
         result = {"status": "Message sent to Telegram"}
-        logging.info(f"📝 /zoho-mail-webhook - Email from {sender} forwarded")
+        logging.info(f"📧 email forwarded: {sender}")
         return result
 
     except Exception as e:
-        logging.error(f"❌ /zoho-mail-webhook - Error: {e}")
+        logging.error(f"❌ email error: {e}")
         return {"status": "error", "message": str(e)}
 
 
@@ -384,27 +361,27 @@ def handle_bosta_webhook(request: Request):
             msg = f"📦 🦺Emergence🦺 \nTracking #: {tracking}\nBusiness Ref: {business_ref}\nStatus: Awaiting your action"
             send_telegram(EME, CON_CHAT_ID, msg)
             result = {"status": "notified"}
-            logging.info(f"📝 /bosta-webhook - Emergency notification for tracking {tracking}")
+            logging.info(f"🚨 emergency: {tracking}")
             return result
         elif state == 100:
             msg = f"📦 🦺Emergence🦺 \nTracking #: {tracking}\nBusiness Ref: {business_ref}\nStatus: Package Lost"
             send_telegram(EME, CON_CHAT_ID, msg)
             result = {"status": "notified"}
-            logging.info(f"📝 /bosta-webhook - Package lost for tracking {tracking}")
+            logging.info(f"📦 package lost: {tracking}")
             return result
         elif state == 101:
             msg = f"📦 🦺Emergence🦺 \nTracking #: {tracking}\nBusiness Ref: {business_ref}\nStatus: Package Damaged"
             send_telegram(EME, CON_CHAT_ID, msg)
             result = {"status": "notified"}
-            logging.info(f"📝 /bosta-webhook - Package damaged for tracking {tracking}")
+            logging.info(f"📦 package damaged: {tracking}")
             return result
         else:
             result = {"status": "ignored", "state": state}
-            logging.info(f"📝 /bosta-webhook - Ignored state {state} for tracking {tracking}")
+            logging.info(f"⚡ ignored: {state}")
             return result
 
     except Exception as e:
-        logging.error(f"❌ /bosta-webhook - Error: {e}")
+        logging.error(f"❌ bosta error: {e}")
         return {"status": "error", "message": str(e)}
 
 
@@ -622,7 +599,7 @@ async def save_and_send_tracking(request: Request):
         order_name = data.get("name", "").replace(".1", "")
         if tracking in seen_trackings:
             result = {"status": "duplicate_tracking_skipped"}
-            logging.info(f"📝 /tracking - Duplicate tracking {tracking}, skipping")
+            logging.info(f"🔄 duplicate_tracking_skipped")
             return result
 
         seen_trackings[tracking] = True
@@ -662,11 +639,11 @@ async def save_and_send_tracking(request: Request):
         send_invoice_to_telegram(order, image_map)
 
         result = {"status": "awb_sent_and_invoice_sent"}
-        logging.info(f"📝 /tracking - Success for order {order_name}, tracking {tracking}")
+        logging.info(f"📦 awb_sent_and_invoice_sent")
         return result
 
     except Exception as e:
-        logging.error(f"❌ /tracking - Error: {e}")
+        logging.error(f"❌ tracking error: {e}")
         return {"status": "error", "message": str(e)}
     
 
@@ -679,7 +656,7 @@ async def handle_payment(request: Request):
         order_id = data.get("order_id")
         if order_id in seen_paid:
             result = {"status": "duplicate_tracking_skipped"}
-            logging.info(f"📝 /payment - Duplicate order {order_id}, skipping")
+            logging.info(f"🔄 duplicate_tracking_skipped")
             return result
 
         seen_paid[order_id] = True
@@ -695,19 +672,18 @@ async def handle_payment(request: Request):
 
             send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
             result = {"status": "success"}
-            logging.info(f"📝 /payment - COD order {order_id} processed")
+            logging.info(f"✅ payment success")
 
         elif "Instapay" in gateways:
             send_telegram(PRE_BOT_TOKEN, PRE_CHAT_ID, message)
             result = {"status": "sent to instapay bot"}
-            logging.info(f"📝 /payment - Instapay order {order_id} sent to prepaid bot")
+            logging.info(f"📤 sent to instapay bot")
             return result
 
-        logging.info(f"📝 /payment - Order {order_id} processed with gateways: {gateways}")
         return result
 
     except Exception as e:
-        logging.error(f"❌ /payment - Error: {e}")
+        logging.error(f"❌ payment error: {e}")
         return {"status": "error", "message": str(e)}
 
 
@@ -760,11 +736,11 @@ def get_discount(code: str = Query(..., description="Discount code to lookup")):
             "type": value_type,
             "value": formatted_value
         }
-        logging.info(f"📝 /discount - Lookup for code {code}: {result}")
+        logging.info(f"🎫 discount checked: {code}")
         return result
 
     except Exception as e:
-        logging.error(f"❌ /discount - Error: {e}")
+        logging.error(f"❌ discount error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/customer/graphql")
@@ -822,34 +798,52 @@ async def customer_graphql_proxy(request: Request):
             )
         
         result = response.json()
-        logging.info(f"📝 /customer/graphql - Query executed successfully")
+        logging.info(f"🔍 graphql query executed")
         return result
         
     except requests.exceptions.RequestException as e:
-        logging.error(f"❌ /customer/graphql - Request error: {e}")
+        logging.error(f"❌ graphql error: {e}")
         return JSONResponse(
             status_code=500,
             content={"errors": [{"message": f"Proxy error: {str(e)}"}]}
         )
     except Exception as e:
-        logging.error(f"❌ /customer/graphql - Unexpected error: {e}")
+        logging.error(f"❌ graphql error: {e}")
         return JSONResponse(
             status_code=500,
             content={"errors": [{"message": str(e)}]}
         )
 
-# ==================== 🔥 endpoint لفحص حالة الـ logging ====================
+# ==================== 🔥 WEBHOOK الرئيسي ====================
 
-@app.get("/debug-log")
-async def debug_log():
-    """Endpoint لاختبار نظام الـ logging"""
-    test_data = {
-        "message": "هذا اختبار للـ logging",
-        "timestamp": datetime.now().isoformat(),
-        "status": "success"
-    }
-    logging.info(f"🔍 DEBUG LOG - Test message: {test_data}")
-    return test_data
+@app.post("/webhook")
+async def handle_order(request: Request):
+    try:
+        data = await request.json()
+        paid = data.get("financial_status", "")
+        
+        if paid=="Paid" or paid=="paid":
+            result = {"status": "paid - skipped"}
+            logging.info(f"💰 paid - skipped")
+            return result
+        
+        elif "Instapay" in data.get("payment_gateway_names", []):
+            message = formatt_order_messag(data)
+            send_telegram(PRE_BOT_TOKEN, PRE_CHAT_ID, message)
+            result = {"status": "sent to prepaid bot"}
+            logging.info(f"📤 sent to prepaid bot")
+            return result
+        
+        else:
+            message = format_order_messag(data)
+            send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
+            result = {"status": "sent"}
+            logging.info(f"📨 sent")
+            return result
+            
+    except Exception as e:
+        logging.error(f"❌ webhook error: {e}")
+        return {"status": "error", "message": str(e)}
 
 # ==================== 🔥 باقي الكود الحالي بدون تغيير ====================
 
@@ -888,7 +882,7 @@ async def create_popup(popup: PopupRequest):
     }
     popups_db.append(popup_data)
     
-    logging.info(f"New popup created: {popup.title}")
+    logging.info(f"📱 popup created: {popup.title}")
     return {"status": "success", "popup": popup_data}
 
 # Endpoint لجلب الـ popup النشط
@@ -986,7 +980,7 @@ async def register_fcm_token(token: str = Query(..., description="FCM token from
         
         if token and token not in fcm_tokens_db:
             fcm_tokens_db.append(token)
-            logging.info(f"✅ New FCM token registered: {token[:20]}...")
+            logging.info(f"📱 fcm token registered")
         
         return {
             "status": "success", 
@@ -994,7 +988,7 @@ async def register_fcm_token(token: str = Query(..., description="FCM token from
             "total_tokens": len(fcm_tokens_db)
         }
     except Exception as e:
-        logging.error(f"❌ Error registering FCM token: {e}")
+        logging.error(f"❌ fcm error: {e}")
         return {"status": "error", "message": str(e)}
 
 @app.post("/api/send-notification-to-all")
@@ -1030,7 +1024,7 @@ async def send_notification_to_all(notification: FCMNotificationRequest):
         # إرسال الرسالة
         response = messaging.send_each_for_multicast(message)
         
-        logging.info(f"📤 Notification sent to {response.success_count} devices")
+        logging.info(f"📲 notification sent: {response.success_count} devices")
         
         return {
             "status": "success",
@@ -1040,7 +1034,7 @@ async def send_notification_to_all(notification: FCMNotificationRequest):
         }
         
     except Exception as e:
-        logging.error(f"❌ Error sending notification: {e}")
+        logging.error(f"❌ notification error: {e}")
         return {"status": "error", "message": str(e)}
 
 @app.post("/api/send-promotional-notification")
@@ -1112,34 +1106,10 @@ def send_order_notification(order_data, notification_type):
         )
         
         messaging.send_each_for_multicast(message)
-        logging.info(f"✅ Auto-notification sent: {notification_type}")
+        logging.info(f"📱 auto-notification: {notification_type}")
         
     except Exception as e:
-        logging.error(f"❌ Error sending auto-notification: {e}")
-
-# ==================== 🔥 تحديث الـ webhook الحالي لإرسال إشعارات ====================
-
-@app.post("/webhook")
-async def handle_order(request: Request):
-    data = await request.json()
-    paid = data.get("financial_status", "")
-    
-    
-    if paid=="Paid" or paid=="paid":
-        # إرسال إشعار عند الدفع
-        return {"status": "paid - skipped"}
-    
-    elif "Instapay" in data.get("payment_gateway_names", []):
-        message = formatt_order_messag(data)
-        send_telegram(PRE_BOT_TOKEN, PRE_CHAT_ID, message)
-        return {"status": "sent to prepaid bot"}
-    
-    else:
-        message = format_order_messag(data)
-        send_telegram(OTHER_BOT_TOKEN, OTHER_CHAT_ID, message)
-        return {"status": "sent"}
-
-
+        logging.error(f"❌ auto-notification error: {e}")
 
 @app.post("/api/test-notification")
 async def test_notification():
@@ -1158,12 +1128,10 @@ async def test_notification():
         
         result = await send_notification_to_all(test_notification)
         
-        # إرسال تأكيد للتليجرام أيضاً
-        
         return result
         
     except Exception as e:
-        logging.error(f"❌ Error in test notification: {e}")
+        logging.error(f"❌ test notification error: {e}")
         return {"status": "error", "message": str(e)}
 
 
@@ -1244,7 +1212,7 @@ async def check_products_availability(request: Request):
             }
             
     except Exception as e:
-        logging.error(f"Error checking product availability: {e}")
+        logging.error(f"❌ availability error: {e}")
         return {
             'status': 'error',
             'message': f'Error checking availability: {str(e)}'
@@ -1336,7 +1304,7 @@ async def create_order(request: Request):
                 "total_amount": order['total_price'],
                 "message": "Order created successfully"
             }
-            logging.info(f"📝 /create-order - Order {order['name']} created successfully")
+            logging.info(f"🛍️ order created: {order['name']}")
             return result
         else:
             error_detail = response.json().get('errors', 'Unknown error')
@@ -1344,10 +1312,10 @@ async def create_order(request: Request):
             raise HTTPException(status_code=response.status_code, detail=f"Shopify API Error: {error_detail}")
 
     except requests.exceptions.RequestException as e:
-        logging.error(f"Network error: {e}")
+        logging.error(f"❌ create order error: {e}")
         raise HTTPException(status_code=500, detail=f"Network error: {str(e)}")
     except Exception as e:
-        logging.error(f"Unexpected error: {e}")
+        logging.error(f"❌ create order error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/create-checkout")
@@ -1394,5 +1362,5 @@ async def create_checkout(request: Request):
         return await create_order(Request(scope=request.scope, receive=request.receive))
         
     except Exception as e:
-        logging.error(f"Error in create-checkout: {e}")
+        logging.error(f"❌ checkout error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
