@@ -199,8 +199,6 @@ seen_edit = TTLCache(maxsize=1000, ttl=86400)
 async def edit_order(request: Request):
     data1 = await request.json() 
     order_id = data1.get("order_edit").get("order_id")
-    if order_id in seen_edit:
-        return {"status": "duplicate_tracking_skipped"}
 
     seen_edit[order_id] = True
     
@@ -1281,4 +1279,5 @@ async def create_checkout(request: Request):
     except Exception as e:
         logging.error(f"Error in create-checkout: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
